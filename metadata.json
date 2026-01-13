@@ -1,0 +1,5 @@
+{
+  "name": "Delphi Clone",
+  "description": "Pixel-perfect recreation of the Delphi landing page using React, Tailwind, GSAP and SVG perspective grids.",
+  "requestFramePermissions": []
+}
