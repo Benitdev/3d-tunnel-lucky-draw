@@ -1,369 +1,1011 @@
-import React, { useRef, useLayoutEffect, useEffect } from 'react';
-import gsap from 'gsap';
-import * as THREE from 'three';
+import React, { useRef, useLayoutEffect, useEffect, useState } from "react"
+import gsap from "gsap"
+import * as THREE from "three"
+import { getSelectedNumbers, saveNumberToSheet } from "../utils/googleSheets"
 
 interface HeroProps {
-  isDarkMode: boolean;
+  isDarkMode: boolean
+}
+
+interface NumberCell {
+  number: number
+  mesh: THREE.Mesh | null
+  isSelected: boolean
+  isDisabled: boolean
 }
 
 const Hero: React.FC<HeroProps> = ({ isDarkMode }) => {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const contentRef = useRef<HTMLDivElement>(null);
-  
+  const containerRef = useRef<HTMLDivElement>(null)
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const contentRef = useRef<HTMLDivElement>(null)
+
   // Store refs for cleanup and animation
-  const sceneRef = useRef<THREE.Scene | null>(null);
-  const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
-  const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
-  const segmentsRef = useRef<THREE.Group[]>([]);
-  const scrollPosRef = useRef(0);
+  const sceneRef = useRef<THREE.Scene | null>(null)
+  const rendererRef = useRef<THREE.WebGLRenderer | null>(null)
+  const cameraRef = useRef<THREE.PerspectiveCamera | null>(null)
+  const segmentsRef = useRef<THREE.Group[]>([])
+  const scrollPosRef = useRef(0)
+  const raycasterRef = useRef<THREE.Raycaster | null>(null)
+  const mouseRef = useRef<THREE.Vector2>(new THREE.Vector2())
+  const numberCellsRef = useRef<Map<number, NumberCell>>(new Map())
+  const hoveredCellRef = useRef<THREE.Mesh | null>(null)
+
+  // State
+  const [selectedNumber, setSelectedNumber] = useState<number | null>(null)
+  const [userHasSelected, setUserHasSelected] = useState(false)
+  const [message, setMessage] = useState<{
+    type: "success" | "error"
+    text: string
+  } | null>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
+  // Google Sheets config (set these in environment variables)
+  const GOOGLE_SHEETS_CONFIG = {
+    spreadsheetId: import.meta.env.VITE_GOOGLE_SHEETS_ID || "",
+    apiKey: import.meta.env.VITE_GOOGLE_API_KEY || "",
+    scriptUrl: import.meta.env.VITE_GOOGLE_SCRIPT_URL || "",
+  }
 
   // --- CONFIGURATION ---
   // Tuned to match the reference design's density and scale
-  const TUNNEL_WIDTH = 24;
-  const TUNNEL_HEIGHT = 16;
-  const SEGMENT_DEPTH = 6; // Short depth for "square-ish" floor tiles
-  const NUM_SEGMENTS = 14; 
-  const FOG_DENSITY = 0.02;
+  const TUNNEL_WIDTH = 24
+  const TUNNEL_HEIGHT = 16
+  const SEGMENT_DEPTH = 6 // Short depth for "square-ish" floor tiles
+  const NUM_SEGMENTS = 14
+  const FOG_DENSITY = 0.02
 
   // Grid Divisions
-  const FLOOR_COLS = 6; // Number of columns on floor/ceiling
-  const WALL_ROWS = 4;  // Number of rows on walls
+  const FLOOR_COLS = 6 // Number of columns on floor/ceiling
+  const WALL_ROWS = 4 // Number of rows on walls
 
   // Derived dimensions
-  const COL_WIDTH = TUNNEL_WIDTH / FLOOR_COLS;
-  const ROW_HEIGHT = TUNNEL_HEIGHT / WALL_ROWS;
+  const COL_WIDTH = TUNNEL_WIDTH / FLOOR_COLS
+  const ROW_HEIGHT = TUNNEL_HEIGHT / WALL_ROWS
 
-  // Unsplash images - Mix of portraits, landscapes, and abstracts
-  const imageUrls = [
-    "https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=600&fit=crop", // Portrait
-    "https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?q=80&w=600&fit=crop", // Portrait
-    "https://images.unsplash.com/photo-1517841905240-472988babdf9?q=80&w=600&fit=crop", // People
-    "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?q=80&w=600&fit=crop", // Portrait
-    "https://images.unsplash.com/photo-1544005313-94ddf0286df2?q=80&w=600&fit=crop", // Portrait
-    "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=600&fit=crop", // Portrait
-    "https://images.unsplash.com/photo-1488161628813-99c974c76949?q=80&w=600&fit=crop", // People
-    "https://images.unsplash.com/photo-1521119989659-a83eee488058?q=80&w=600&fit=crop", // Abstract/Dark
-    "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?q=80&w=600&fit=crop", // Tech
-    "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=600&fit=crop", // Portrait
-    "https://images.unsplash.com/photo-1664575602276-acd073f104c1?q=80&w=600&fit=crop", // Abstract
-    "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=600&fit=crop", // Abstract
-    "https://images.unsplash.com/photo-1494790108377-be9c29b29330?q=80&w=600&fit=crop", // Portrait
-    "https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?q=80&w=600&fit=crop", // Portrait
-  ];
+  // Helper: Create text texture for number
+  const createNumberTexture = (
+    number: number,
+    isDisabled: boolean
+  ): THREE.CanvasTexture => {
+    const canvas = document.createElement("canvas")
+    const context = canvas.getContext("2d")!
+    canvas.width = 512
+    canvas.height = 512
+
+    // Clear canvas with transparent background
+    context.clearRect(0, 0, canvas.width, canvas.height)
+
+    // Draw number on canvas
+    context.fillStyle = isDisabled
+      ? isDarkMode
+        ? "#F63049"
+        : "#cccccc"
+      : isDarkMode
+      ? "#00F7FF"
+      : "#000000"
+    context.font = "bold 200px Arial"
+    context.textAlign = "center"
+    context.textBaseline = "middle"
+    context.fillText(number.toString(), 256, 256)
+
+    const texture = new THREE.CanvasTexture(canvas)
+    texture.needsUpdate = true
+    texture.minFilter = THREE.LinearFilter
+    texture.magFilter = THREE.LinearFilter
+
+    return texture
+  }
+
+  // Helper: Create number mesh with plane and text
+  const createNumberMesh = (
+    number: number,
+    pos: THREE.Vector3,
+    rot: THREE.Euler,
+    wd: number,
+    ht: number,
+    isDisabled: boolean
+  ): THREE.Group => {
+    const group = new THREE.Group()
+
+    // Create plane background
+    const bgGeom = new THREE.PlaneGeometry(wd * 0.8, ht * 0.8)
+    const bgMat = new THREE.MeshBasicMaterial({
+      color: isDisabled
+        ? isDarkMode
+          ? 0x333333
+          : 0xeeeeee
+        : isDarkMode
+        ? 0x222222
+        : 0xf5f5f5,
+      transparent: true,
+      opacity: isDisabled ? 0.3 : 0.7,
+      side: THREE.DoubleSide,
+    })
+    const bgPlane = new THREE.Mesh(bgGeom, bgMat)
+    group.add(bgPlane)
+
+    // Create number texture plane
+    const numberTexture = createNumberTexture(number, isDisabled)
+    const numberGeom = new THREE.PlaneGeometry(wd * 0.6, ht * 0.6)
+    const numberMat = new THREE.MeshBasicMaterial({
+      map: numberTexture,
+      transparent: true,
+      opacity: isDisabled ? 0.6 : 1.0,
+      side: THREE.DoubleSide,
+      alphaTest: 0.1,
+    })
+    const numberPlane = new THREE.Mesh(numberGeom, numberMat)
+    numberPlane.position.z = 0.01
+    group.add(numberPlane)
+
+    group.position.copy(pos)
+    group.rotation.copy(rot)
+    group.userData = { number, isDisabled, type: "numberCell" }
+
+    return group
+  }
 
   // Helper: Create a segment with grid lines and filled cells
   const createSegment = (zPos: number) => {
-    const group = new THREE.Group();
-    group.position.z = zPos;
+    const group = new THREE.Group()
+    group.position.z = zPos
 
-    const w = TUNNEL_WIDTH / 2;
-    const h = TUNNEL_HEIGHT / 2;
-    const d = SEGMENT_DEPTH;
+    const w = TUNNEL_WIDTH / 2
+    const h = TUNNEL_HEIGHT / 2
+    const d = SEGMENT_DEPTH
 
     // --- 1. Grid Lines ---
     // Start with default light mode colors; these will be updated by useEffect immediately on mount
-    const lineMaterial = new THREE.LineBasicMaterial({ color: 0xb0b0b0, transparent: true, opacity: 0.5 });
-    const lineGeo = new THREE.BufferGeometry();
-    const vertices: number[] = [];
+    const lineMaterial = new THREE.LineBasicMaterial({
+      color: 0xb0b0b0,
+      transparent: true,
+      opacity: 0.5,
+    })
+    const lineGeo = new THREE.BufferGeometry()
+    const vertices: number[] = []
 
     // A. Longitudinal Lines (Z-axis)
     // Floor & Ceiling (varying X)
     for (let i = 0; i <= FLOOR_COLS; i++) {
-      const x = -w + (i * COL_WIDTH);
+      const x = -w + i * COL_WIDTH
       // Floor line
-      vertices.push(x, -h, 0, x, -h, -d);
+      vertices.push(x, -h, 0, x, -h, -d)
       // Ceiling line
-      vertices.push(x, h, 0, x, h, -d);
+      vertices.push(x, h, 0, x, h, -d)
     }
     // Walls (varying Y) - excluding top/bottom corners already drawn
     for (let i = 1; i < WALL_ROWS; i++) {
-      const y = -h + (i * ROW_HEIGHT);
+      const y = -h + i * ROW_HEIGHT
       // Left Wall line
-      vertices.push(-w, y, 0, -w, y, -d);
+      vertices.push(-w, y, 0, -w, y, -d)
       // Right Wall line
-      vertices.push(w, y, 0, w, y, -d);
+      vertices.push(w, y, 0, w, y, -d)
     }
 
     // B. Latitudinal Lines (Ring at z=0)
     // Floor (Bottom edge)
-    vertices.push(-w, -h, 0, w, -h, 0);
+    vertices.push(-w, -h, 0, w, -h, 0)
     // Ceiling (Top edge)
-    vertices.push(-w, h, 0, w, h, 0);
+    vertices.push(-w, h, 0, w, h, 0)
     // Left Wall (Left edge)
-    vertices.push(-w, -h, 0, -w, h, 0);
+    vertices.push(-w, -h, 0, -w, h, 0)
     // Right Wall (Right edge)
-    vertices.push(w, -h, 0, w, h, 0);
+    vertices.push(w, -h, 0, w, h, 0)
 
-    lineGeo.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
-    const lines = new THREE.LineSegments(lineGeo, lineMaterial);
-    group.add(lines);
+    lineGeo.setAttribute(
+      "position",
+      new THREE.Float32BufferAttribute(vertices, 3)
+    )
+    const lines = new THREE.LineSegments(lineGeo, lineMaterial)
+    group.add(lines)
 
-    // Initial population of images
-    populateImages(group, w, h, d);
+    // Initial population of numbers
+    populateNumbers(group, w, h, d, zPos)
 
-    return group;
-  };
+    return group
+  }
 
-  // Helper: Populate images in a segment
-  const populateImages = (group: THREE.Group, w: number, h: number, d: number) => {
-    const textureLoader = new THREE.TextureLoader();
-    const cellMargin = 0.4;
+  // Helper: Populate numbers in a segment (1-100 infinite loop)
+  const populateNumbers = (
+    group: THREE.Group,
+    w: number,
+    h: number,
+    d: number,
+    zPos: number
+  ) => {
+    // First, remove all existing number meshes from this group
+    const toRemove: THREE.Object3D[] = []
+    group.traverse((child) => {
+      if (child.name?.startsWith("number_")) {
+        toRemove.push(child)
+      }
+    })
+    toRemove.forEach((obj) => {
+      group.remove(obj)
+      if (obj instanceof THREE.Group) {
+        obj.traverse((child) => {
+          if (child instanceof THREE.Mesh) {
+            child.geometry.dispose()
+            if (child.material instanceof THREE.Material) {
+              if (Array.isArray(child.material)) {
+                child.material.forEach((mat) => {
+                  if (mat.map) mat.map.dispose()
+                  mat.dispose()
+                })
+              } else {
+                if (child.material.map) child.material.map.dispose()
+                child.material.dispose()
+              }
+            }
+          }
+        })
+      }
+    })
 
-    const addImg = (pos: THREE.Vector3, rot: THREE.Euler, wd: number, ht: number) => {
-        const url = imageUrls[Math.floor(Math.random() * imageUrls.length)];
-        const geom = new THREE.PlaneGeometry(wd - cellMargin, ht - cellMargin);
-        const mat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, side: THREE.DoubleSide });
-        textureLoader.load(url, (tex) => {
-        tex.minFilter = THREE.LinearFilter;
-        mat.map = tex;
-        mat.needsUpdate = true;
-        gsap.to(mat, { opacity: 0.85, duration: 1 });
-        });
-        const m = new THREE.Mesh(geom, mat);
-        m.position.copy(pos);
-        m.rotation.copy(rot);
-        m.name = "slab_image";
-        group.add(m);
-    };
+    // Calculate which numbers to show based on segment position
+    // Each segment gets a range of numbers, cycling through 1-100
+    const segmentIndex = Math.floor(Math.abs(zPos) / SEGMENT_DEPTH)
+    const totalCells = FLOOR_COLS * 2 + WALL_ROWS * 2 // Floor + Ceiling + Left + Right
+    const startNumber = ((segmentIndex * totalCells) % 100) + 1
+    let currentNumber = startNumber
 
-    // Logic: Iterate slots, but skip if the previous slot was filled.
-    // Threshold adjusted to 0.80 (20%) to compensate for skipped slots and maintain density.
+    const addNumber = (
+      pos: THREE.Vector3,
+      rot: THREE.Euler,
+      wd: number,
+      ht: number,
+      number: number
+    ) => {
+      const cell = numberCellsRef.current.get(number)
+      const isDisabled = cell?.isDisabled || false
 
-    // Floor
-    let lastFloorIdx = -999;
+      // Create unique name for this instance
+      const uniqueName = `number_${number}_seg_${segmentIndex}_${pos.x}_${pos.y}_${pos.z}`
+      const numberGroup = createNumberMesh(number, pos, rot, wd, ht, isDisabled)
+      numberGroup.name = uniqueName
+      group.add(numberGroup)
+
+      // Store reference only for the first instance of each number
+      if (!numberCellsRef.current.has(number)) {
+        numberCellsRef.current.set(number, {
+          number,
+          mesh: numberGroup,
+          isSelected: false,
+          isDisabled,
+        })
+      }
+
+      // Increment number, wrapping around 1-100
+      currentNumber = currentNumber >= 100 ? 1 : currentNumber + 1
+    }
+
+    // Floor - populate with numbers (one per cell)
     for (let i = 0; i < FLOOR_COLS; i++) {
-        // Must be at least 2 slots away from last image to avoid adjacency (i > last + 1)
-        if (i > lastFloorIdx + 1) {
-            if (Math.random() > 0.80) {
-                addImg(new THREE.Vector3(-w + i*COL_WIDTH + COL_WIDTH/2, -h, -d/2), new THREE.Euler(-Math.PI/2,0,0), COL_WIDTH, d);
-                lastFloorIdx = i;
-            }
-        }
+      addNumber(
+        new THREE.Vector3(-w + i * COL_WIDTH + COL_WIDTH / 2, -h, -d / 2),
+        new THREE.Euler(-Math.PI / 2, 0, 0),
+        COL_WIDTH,
+        d,
+        currentNumber
+      )
     }
-    
-    // Ceiling
-    let lastCeilIdx = -999;
+
+    // Ceiling - populate with numbers (one per cell)
     for (let i = 0; i < FLOOR_COLS; i++) {
-        if (i > lastCeilIdx + 1) {
-            if (Math.random() > 0.88) { // Keep ceiling sparser
-                addImg(new THREE.Vector3(-w + i*COL_WIDTH + COL_WIDTH/2, h, -d/2), new THREE.Euler(Math.PI/2,0,0), COL_WIDTH, d);
-                lastCeilIdx = i;
-            }
-        }
+      addNumber(
+        new THREE.Vector3(-w + i * COL_WIDTH + COL_WIDTH / 2, h, -d / 2),
+        new THREE.Euler(Math.PI / 2, 0, 0),
+        COL_WIDTH,
+        d,
+        currentNumber
+      )
     }
-    
-    // Left Wall
-    let lastLeftIdx = -999;
+
+    // Left Wall - populate with numbers (one per cell)
     for (let i = 0; i < WALL_ROWS; i++) {
-        if (i > lastLeftIdx + 1) {
-            if (Math.random() > 0.80) {
-                addImg(new THREE.Vector3(-w, -h + i*ROW_HEIGHT + ROW_HEIGHT/2, -d/2), new THREE.Euler(0,Math.PI/2,0), d, ROW_HEIGHT);
-                lastLeftIdx = i;
-            }
-        }
+      addNumber(
+        new THREE.Vector3(-w, -h + i * ROW_HEIGHT + ROW_HEIGHT / 2, -d / 2),
+        new THREE.Euler(0, Math.PI / 2, 0),
+        d,
+        ROW_HEIGHT,
+        currentNumber
+      )
     }
-    
-    // Right Wall
-    let lastRightIdx = -999;
+
+    // Right Wall - populate with numbers (one per cell)
     for (let i = 0; i < WALL_ROWS; i++) {
-        if (i > lastRightIdx + 1) {
-            if (Math.random() > 0.80) {
-                addImg(new THREE.Vector3(w, -h + i*ROW_HEIGHT + ROW_HEIGHT/2, -d/2), new THREE.Euler(0,-Math.PI/2,0), d, ROW_HEIGHT);
-                lastRightIdx = i;
-            }
-        }
+      addNumber(
+        new THREE.Vector3(w, -h + i * ROW_HEIGHT + ROW_HEIGHT / 2, -d / 2),
+        new THREE.Euler(0, -Math.PI / 2, 0),
+        d,
+        ROW_HEIGHT,
+        currentNumber
+      )
     }
   }
 
   // --- INITIAL SETUP ---
   useEffect(() => {
-    if (!canvasRef.current || !containerRef.current) return;
+    if (!canvasRef.current || !containerRef.current) return
 
     // THREE JS SETUP
-    const scene = new THREE.Scene();
-    sceneRef.current = scene;
+    const scene = new THREE.Scene()
+    sceneRef.current = scene
 
-    const width = window.innerWidth;
-    const height = window.innerHeight;
-    const camera = new THREE.PerspectiveCamera(70, width / height, 0.1, 1000);
-    camera.position.set(0, 0, 0); 
-    cameraRef.current = camera;
+    const width = window.innerWidth
+    const height = window.innerHeight
+    const camera = new THREE.PerspectiveCamera(70, width / height, 0.1, 1000)
+    camera.position.set(0, 0, 0)
+    cameraRef.current = camera
 
-    const renderer = new THREE.WebGLRenderer({ 
-      canvas: canvasRef.current, 
+    const renderer = new THREE.WebGLRenderer({
+      canvas: canvasRef.current,
       antialias: true,
       alpha: false,
-      powerPreference: "high-performance"
-    });
-    renderer.setSize(width, height);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    rendererRef.current = renderer;
+      powerPreference: "high-performance",
+    })
+    renderer.setSize(width, height)
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+    rendererRef.current = renderer
+
+    // Setup raycaster for mouse interaction
+    const raycaster = new THREE.Raycaster()
+    raycasterRef.current = raycaster
 
     // Generate segments
-    const segments: THREE.Group[] = [];
+    const segments: THREE.Group[] = []
     for (let i = 0; i < NUM_SEGMENTS; i++) {
-      const z = -i * SEGMENT_DEPTH;
-      const segment = createSegment(z);
-      scene.add(segment);
-      segments.push(segment);
+      const z = -i * SEGMENT_DEPTH
+      const segment = createSegment(z)
+      scene.add(segment)
+      segments.push(segment)
     }
-    segmentsRef.current = segments;
+    segmentsRef.current = segments
+
+    // Function to update disabled numbers from Google Sheets
+    const updateDisabledNumbers = async () => {
+      if (!GOOGLE_SHEETS_CONFIG.spreadsheetId || !GOOGLE_SHEETS_CONFIG.apiKey) {
+        return
+      }
+
+      try {
+        const selectedNumbers = await getSelectedNumbers(GOOGLE_SHEETS_CONFIG)
+        const newDisabledNumbers = new Set(selectedNumbers)
+
+        // Update number cells and their visual appearance
+        newDisabledNumbers.forEach((num) => {
+          const cell = numberCellsRef.current.get(num)
+          if (cell) {
+            // Only update if it wasn't disabled before
+            if (!cell.isDisabled) {
+              cell.isDisabled = true
+
+              // Update the mesh visual appearance if it exists
+              if (cell.mesh && sceneRef.current) {
+                // Update userData first
+                cell.mesh.userData.isDisabled = true
+
+                // Traverse and update all child meshes
+                cell.mesh.traverse((child) => {
+                  if (child instanceof THREE.Mesh) {
+                    const material = child.material
+                    if (material instanceof THREE.MeshBasicMaterial) {
+                      // Update background plane (no texture)
+                      if (!material.map) {
+                        material.color.setHex(isDarkMode ? 0x333333 : 0xeeeeee)
+                        material.opacity = 0.3
+                        material.needsUpdate = true
+                      } else {
+                        // Update number texture plane
+                        material.opacity = 0.6
+                        // Create and update texture
+                        const oldTexture = material.map
+                        const newTexture = createNumberTexture(num, true)
+                        material.map = newTexture
+                        material.needsUpdate = true
+                        // Dispose old texture
+                        if (oldTexture) {
+                          oldTexture.dispose()
+                        }
+                      }
+                    }
+                  }
+                })
+              }
+            }
+          } else {
+            // Create new entry for disabled number
+            numberCellsRef.current.set(num, {
+              number: num,
+              mesh: null,
+              isSelected: false,
+              isDisabled: true,
+            })
+          }
+        })
+
+        // Also update all segments to reflect disabled state for newly created numbers
+        segmentsRef.current.forEach((segment) => {
+          segment.traverse((obj) => {
+            if (obj.userData.type === "numberCell") {
+              const num = obj.userData.number
+              if (newDisabledNumbers.has(num) && !obj.userData.isDisabled) {
+                obj.userData.isDisabled = true
+                // Update visual appearance
+                obj.traverse((child) => {
+                  if (child instanceof THREE.Mesh) {
+                    const material = child.material
+                    if (material instanceof THREE.MeshBasicMaterial) {
+                      if (!material.map) {
+                        material.color.setHex(isDarkMode ? 0x333333 : 0xeeeeee)
+                        material.opacity = 0.3
+                      } else {
+                        material.opacity = 0.6
+                        const oldTexture = material.map
+                        const newTexture = createNumberTexture(num, true)
+                        material.map = newTexture
+                        if (oldTexture) {
+                          oldTexture.dispose()
+                        }
+                      }
+                      material.needsUpdate = true
+                    }
+                  }
+                })
+              }
+            }
+          })
+        })
+      } catch (error) {
+        console.error("Error updating disabled numbers:", error)
+      }
+    }
+
+    // Load disabled numbers initially
+    updateDisabledNumbers()
+
+    // Set up interval to check for new disabled numbers every 10 seconds
+    const intervalId = setInterval(updateDisabledNumbers, 10000)
+
+    // Check if user has already selected
+    const savedSelection = localStorage.getItem("userNumberSelection")
+    if (savedSelection) {
+      const parsed = JSON.parse(savedSelection)
+      setUserHasSelected(true)
+      setSelectedNumber(parsed.number)
+    }
+
+    // Mouse move handler for hover
+    const onMouseMove = (event: MouseEvent) => {
+      mouseRef.current.x = (event.clientX / width) * 2 - 1
+      mouseRef.current.y = -(event.clientY / height) * 2 + 1
+
+      raycaster.setFromCamera(mouseRef.current, camera)
+      const intersects = raycaster.intersectObjects(scene.children, true)
+
+      // Find hovered number cell
+      let currentHovered: THREE.Object3D | null = null
+      for (const intersect of intersects) {
+        const obj = intersect.object
+        // Check if it's a number cell group or a child of one
+        let numberGroup: THREE.Object3D | null = null
+        if (obj.userData.type === "numberCell") {
+          numberGroup = obj
+        } else {
+          // Check parent
+          let parent = obj.parent
+          while (parent) {
+            if (parent.userData.type === "numberCell") {
+              numberGroup = parent
+              break
+            }
+            parent = parent.parent
+          }
+        }
+
+        if (
+          numberGroup &&
+          !numberGroup.userData.isDisabled &&
+          !userHasSelected
+        ) {
+          currentHovered = numberGroup
+          break
+        }
+      }
+
+      // Only update if hovering over a different cell
+      if (currentHovered !== hoveredCellRef.current) {
+        // Reset previous hover
+        if (hoveredCellRef.current) {
+          gsap.to(hoveredCellRef.current.scale, {
+            x: 1,
+            y: 1,
+            z: 1,
+            duration: 0.15,
+          })
+        }
+
+        // Set new hover
+        hoveredCellRef.current = currentHovered as THREE.Group | null
+        if (hoveredCellRef.current) {
+          gsap.to(hoveredCellRef.current.scale, {
+            x: 1.2,
+            y: 1.2,
+            z: 1.2,
+            duration: 0.15,
+          })
+          if (canvasRef.current) {
+            canvasRef.current.style.cursor = "pointer"
+          }
+        } else {
+          if (canvasRef.current) {
+            canvasRef.current.style.cursor = "default"
+          }
+        }
+      }
+    }
+
+    // Mouse click handler
+    const onMouseClick = (event: MouseEvent) => {
+      if (userHasSelected) return
+
+      mouseRef.current.x = (event.clientX / width) * 2 - 1
+      mouseRef.current.y = -(event.clientY / height) * 2 + 1
+
+      raycaster.setFromCamera(mouseRef.current, camera)
+      const intersects = raycaster.intersectObjects(scene.children, true)
+
+      for (const intersect of intersects) {
+        const obj = intersect.object
+        // Check if it's a number cell group or a child of one
+        let numberGroup: THREE.Object3D | null = null
+        if (obj.userData.type === "numberCell") {
+          numberGroup = obj
+        } else {
+          // Check parent
+          let parent = obj.parent
+          while (parent) {
+            if (parent.userData.type === "numberCell") {
+              numberGroup = parent
+              break
+            }
+            parent = parent.parent
+          }
+        }
+
+        if (numberGroup && !numberGroup.userData.isDisabled) {
+          const number = numberGroup.userData.number
+          handleNumberSelect(number)
+          break
+        }
+      }
+    }
+
+    window.addEventListener("mousemove", onMouseMove)
+    window.addEventListener("click", onMouseClick)
 
     // Animation Loop
-    let frameId: number;
+    let frameId: number
     const animate = () => {
-      frameId = requestAnimationFrame(animate);
-      if (!cameraRef.current || !sceneRef.current || !rendererRef.current) return;
+      frameId = requestAnimationFrame(animate)
+      if (!cameraRef.current || !sceneRef.current || !rendererRef.current)
+        return
 
-      const targetZ = -scrollPosRef.current * 0.05; 
-      const currentZ = cameraRef.current.position.z;
-      cameraRef.current.position.z += (targetZ - currentZ) * 0.1;
+      const targetZ = -scrollPosRef.current * 0.05
+      const currentZ = cameraRef.current.position.z
+      cameraRef.current.position.z += (targetZ - currentZ) * 0.1
 
       // Bidirectional Infinite Logic
-      const tunnelLength = NUM_SEGMENTS * SEGMENT_DEPTH;
-      
-      const camZ = cameraRef.current.position.z;
-      
+      const tunnelLength = NUM_SEGMENTS * SEGMENT_DEPTH
+
+      const camZ = cameraRef.current.position.z
+
       segmentsRef.current.forEach((segment) => {
         // 1. Moving Forward
         if (segment.position.z > camZ + SEGMENT_DEPTH) {
-            let minZ = 0;
-            segmentsRef.current.forEach(s => minZ = Math.min(minZ, s.position.z));
-            segment.position.z = minZ - SEGMENT_DEPTH;
-            
-            // Re-populate
-            const toRemove: THREE.Object3D[] = [];
-            segment.traverse((c) => { if (c.name === 'slab_image') toRemove.push(c); });
-            toRemove.forEach(c => {
-                segment.remove(c);
-                if (c instanceof THREE.Mesh) {
-                    c.geometry.dispose(); 
-                    if (c.material.map) c.material.map.dispose();
-                    c.material.dispose();
-                }
-            });
-            const w = TUNNEL_WIDTH / 2; const h = TUNNEL_HEIGHT / 2; const d = SEGMENT_DEPTH;
-            populateImages(segment, w, h, d);
+          let minZ = 0
+          segmentsRef.current.forEach(
+            (s) => (minZ = Math.min(minZ, s.position.z))
+          )
+          segment.position.z = minZ - SEGMENT_DEPTH
+
+          // Re-populate (cleanup is handled inside populateNumbers)
+          const w = TUNNEL_WIDTH / 2
+          const h = TUNNEL_HEIGHT / 2
+          const d = SEGMENT_DEPTH
+          populateNumbers(segment, w, h, d, segment.position.z)
         }
 
         // 2. Moving Backward
         if (segment.position.z < camZ - tunnelLength - SEGMENT_DEPTH) {
-            let maxZ = -999999;
-            segmentsRef.current.forEach(s => maxZ = Math.max(maxZ, s.position.z));
-            segment.position.z = maxZ + SEGMENT_DEPTH;
+          let maxZ = -999999
+          segmentsRef.current.forEach(
+            (s) => (maxZ = Math.max(maxZ, s.position.z))
+          )
+          segment.position.z = maxZ + SEGMENT_DEPTH
 
-            // Re-populate
-            const toRemove: THREE.Object3D[] = [];
-            segment.traverse((c) => { if (c.name === 'slab_image') toRemove.push(c); });
-            toRemove.forEach(c => {
-                segment.remove(c);
-                if (c instanceof THREE.Mesh) {
-                    c.geometry.dispose(); 
-                    if (c.material.map) c.material.map.dispose();
-                    c.material.dispose();
-                }
-            });
-            const w = TUNNEL_WIDTH / 2; const h = TUNNEL_HEIGHT / 2; const d = SEGMENT_DEPTH;
-            populateImages(segment, w, h, d);
+          // Re-populate (cleanup is handled inside populateNumbers)
+          const w = TUNNEL_WIDTH / 2
+          const h = TUNNEL_HEIGHT / 2
+          const d = SEGMENT_DEPTH
+          populateNumbers(segment, w, h, d, segment.position.z)
         }
-      });
+      })
 
-      rendererRef.current.render(sceneRef.current, cameraRef.current);
-    };
-    animate();
+      rendererRef.current.render(sceneRef.current, cameraRef.current)
+    }
+    animate()
 
-    const onScroll = () => { scrollPosRef.current = window.scrollY; };
-    window.addEventListener('scroll', onScroll);
+    const onScroll = () => {
+      scrollPosRef.current = window.scrollY
+    }
+    window.addEventListener("scroll", onScroll)
     const handleResize = () => {
-      const w = window.innerWidth;
-      const h = window.innerHeight;
-      camera.aspect = w / h;
-      camera.updateProjectionMatrix();
-      renderer.setSize(w, h);
-    };
-    window.addEventListener('resize', handleResize);
+      const w = window.innerWidth
+      const h = window.innerHeight
+      camera.aspect = w / h
+      camera.updateProjectionMatrix()
+      renderer.setSize(w, h)
+    }
+    window.addEventListener("resize", handleResize)
 
     return () => {
-      window.removeEventListener('scroll', onScroll);
-      window.removeEventListener('resize', handleResize);
-      cancelAnimationFrame(frameId);
-      renderer.dispose();
-    };
-  }, []); // Run once on mount
+      window.removeEventListener("scroll", onScroll)
+      window.removeEventListener("resize", handleResize)
+      window.removeEventListener("mousemove", onMouseMove)
+      window.removeEventListener("click", onMouseClick)
+      clearInterval(intervalId)
+      cancelAnimationFrame(frameId)
+      renderer.dispose()
+    }
+  }, []) // Run once on mount
+
+  // Handle number selection
+  const handleNumberSelect = async (number: number) => {
+    if (userHasSelected) {
+      setMessage({ type: "error", text: "You have already selected a number!" })
+      return
+    }
+
+    const cell = numberCellsRef.current.get(number)
+    if (cell?.isDisabled) {
+      setMessage({
+        type: "error",
+        text: "This number has already been selected by someone else.",
+      })
+      return
+    }
+
+    setSelectedNumber(number)
+    setMessage(null)
+
+    // Visual feedback
+    if (cell?.mesh) {
+      gsap.to(cell.mesh.scale, {
+        x: 1.3,
+        y: 1.3,
+        z: 1.3,
+        duration: 0.2,
+        yoyo: true,
+        repeat: 1,
+      })
+    }
+
+    // Save to Google Sheets
+    setIsSubmitting(true)
+    try {
+      if (GOOGLE_SHEETS_CONFIG.scriptUrl) {
+        const result = await saveNumberToSheet(number, {
+          scriptUrl: GOOGLE_SHEETS_CONFIG.scriptUrl,
+        })
+
+        if (result.success) {
+          // Save to localStorage
+          localStorage.setItem(
+            "userNumberSelection",
+            JSON.stringify({
+              number,
+              timestamp: new Date().toISOString(),
+            })
+          )
+
+          setUserHasSelected(true)
+          setMessage({
+            type: "success",
+            text: `Number ${number} has been saved successfully!`,
+          })
+
+          // Update cell state
+          if (cell) {
+            cell.isDisabled = true
+            cell.isSelected = true
+          } else {
+            // Create cell entry if it doesn't exist
+            numberCellsRef.current.set(number, {
+              number,
+              mesh: null,
+              isSelected: true,
+              isDisabled: true,
+            })
+          }
+
+          // Immediately update visual appearance of the selected number
+          const updateNumberVisual = (mesh: THREE.Object3D) => {
+            if (!mesh) return
+
+            // Update userData
+            mesh.userData.isDisabled = true
+
+            // Traverse and update all child meshes
+            mesh.traverse((child) => {
+              if (child instanceof THREE.Mesh) {
+                const material = child.material
+                if (material instanceof THREE.MeshBasicMaterial) {
+                  // Update background plane (no texture)
+                  if (!material.map) {
+                    material.color.setHex(isDarkMode ? 0x333333 : 0xeeeeee)
+                    material.opacity = 0.3
+                    material.needsUpdate = true
+                  } else {
+                    // Update number texture plane
+                    material.opacity = 0.6
+                    // Create and update texture
+                    const oldTexture = material.map
+                    const newTexture = createNumberTexture(number, true)
+                    material.map = newTexture
+                    material.needsUpdate = true
+                    // Dispose old texture
+                    if (oldTexture) {
+                      oldTexture.dispose()
+                    }
+                  }
+                }
+              }
+            })
+          }
+
+          // Update the specific mesh if it exists
+          if (cell?.mesh) {
+            updateNumberVisual(cell.mesh)
+          }
+
+          // Update all instances of this number in all segments
+          if (sceneRef.current) {
+            sceneRef.current.traverse((obj) => {
+              if (
+                obj.userData.type === "numberCell" &&
+                obj.userData.number === number
+              ) {
+                updateNumberVisual(obj)
+              }
+            })
+          }
+        } else {
+          setMessage({
+            type: "error",
+            text: result.error || "Failed to save number. Please try again.",
+          })
+        }
+      } else {
+        // No Google Sheets configured, just save locally
+        localStorage.setItem(
+          "userNumberSelection",
+          JSON.stringify({
+            number,
+            timestamp: new Date().toISOString(),
+          })
+        )
+        setUserHasSelected(true)
+        setMessage({
+          type: "success",
+          text: `Number ${number} selected! (Not saved to Google Sheets - configure API to save)`,
+        })
+
+        // Update cell state and visual appearance even without Google Sheets
+        if (cell) {
+          cell.isDisabled = true
+          cell.isSelected = true
+        } else {
+          numberCellsRef.current.set(number, {
+            number,
+            mesh: null,
+            isSelected: true,
+            isDisabled: true,
+          })
+        }
+
+        // Update visual appearance
+        const updateNumberVisual = (mesh: THREE.Object3D) => {
+          if (!mesh) return
+          mesh.userData.isDisabled = true
+          mesh.traverse((child) => {
+            if (child instanceof THREE.Mesh) {
+              const material = child.material
+              if (material instanceof THREE.MeshBasicMaterial) {
+                if (!material.map) {
+                  material.color.setHex(isDarkMode ? 0x333333 : 0xeeeeee)
+                  material.opacity = 0.3
+                  material.needsUpdate = true
+                } else {
+                  material.opacity = 0.6
+                  const oldTexture = material.map
+                  const newTexture = createNumberTexture(number, true)
+                  material.map = newTexture
+                  material.needsUpdate = true
+                  if (oldTexture) {
+                    oldTexture.dispose()
+                  }
+                }
+              }
+            }
+          })
+        }
+
+        if (cell?.mesh) {
+          updateNumberVisual(cell.mesh)
+        }
+
+        if (sceneRef.current) {
+          sceneRef.current.traverse((obj) => {
+            if (
+              obj.userData.type === "numberCell" &&
+              obj.userData.number === number
+            ) {
+              updateNumberVisual(obj)
+            }
+          })
+        }
+      }
+    } catch (error) {
+      console.error("Error saving number:", error)
+      setMessage({
+        type: "error",
+        text: "Failed to save number. Please try again.",
+      })
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
 
   // --- THEME UPDATE EFFECT ---
   useEffect(() => {
-    if (!sceneRef.current) return;
+    if (!sceneRef.current) return
 
     // Define theme colors
-    const bgHex = isDarkMode ? 0x050505 : 0xffffff;
-    const fogHex = isDarkMode ? 0x050505 : 0xffffff; 
-    
+    const bgHex = isDarkMode ? 0x050505 : 0xffffff
+    const fogHex = isDarkMode ? 0x050505 : 0xffffff
+
     // Light mode: Light Grey lines (0xb0b0b0), higher opacity
     // Dark mode: Medium Grey lines (0x555555) for visibility, slightly adjusted opacity
-    const lineHex = isDarkMode ? 0x555555 : 0xb0b0b0;
-    const lineOp = isDarkMode ? 0.35 : 0.5;
+    const lineHex = isDarkMode ? 0x555555 : 0xb0b0b0
+    const lineOp = isDarkMode ? 0.35 : 0.5
 
     // Apply to scene
-    sceneRef.current.background = new THREE.Color(bgHex);
+    sceneRef.current.background = new THREE.Color(bgHex)
     if (sceneRef.current.fog) {
-        (sceneRef.current.fog as THREE.FogExp2).color.setHex(fogHex);
+      ;(sceneRef.current.fog as THREE.FogExp2).color.setHex(fogHex)
     }
 
     // Apply to existing grid lines
-    segmentsRef.current.forEach(segment => {
-        segment.children.forEach(child => {
-            if (child instanceof THREE.LineSegments) {
-                const mat = child.material as THREE.LineBasicMaterial;
-                mat.color.setHex(lineHex);
-                mat.opacity = lineOp;
-                mat.needsUpdate = true;
-            }
-        });
-    });
-  }, [isDarkMode]);
+    segmentsRef.current.forEach((segment) => {
+      segment.children.forEach((child) => {
+        if (child instanceof THREE.LineSegments) {
+          const mat = child.material as THREE.LineBasicMaterial
+          mat.color.setHex(lineHex)
+          mat.opacity = lineOp
+          mat.needsUpdate = true
+        }
+      })
+    })
+  }, [isDarkMode])
 
   // Text Entrance Animation
   useLayoutEffect(() => {
     const ctx = gsap.context(() => {
-      gsap.fromTo(contentRef.current, 
+      gsap.fromTo(
+        contentRef.current,
         { opacity: 0, y: 30, scale: 0.95 },
-        { opacity: 1, y: 0, scale: 1, duration: 1.2, ease: "power3.out", delay: 0.5 }
-      );
-    }, containerRef);
-    return () => ctx.revert();
-  }, []);
+        {
+          opacity: 1,
+          y: 0,
+          scale: 1,
+          duration: 1.2,
+          ease: "power3.out",
+          delay: 0.5,
+        }
+      )
+    }, containerRef)
+    return () => ctx.revert()
+  }, [])
 
   return (
-    <div ref={containerRef} className={`relative w-full h-[10000vh] transition-colors duration-700 ${isDarkMode ? 'bg-[#050505]' : 'bg-white'}`}>
+    <div
+      ref={containerRef}
+      className={`relative w-full h-[10000vh] transition-colors duration-700 ${
+        isDarkMode ? "bg-[#050505]" : "bg-white"
+      }`}
+    >
       <div className="fixed inset-0 w-full h-full overflow-hidden z-0">
         <canvas ref={canvasRef} className="w-full h-full block" />
       </div>
 
       <div className="fixed inset-0 z-10 flex items-center justify-center pointer-events-none">
-        <div ref={contentRef} className="text-center flex flex-col items-center max-w-3xl px-6 pointer-events-auto mix-blend-multiply-normal"> 
-          
-          <h1 className={`text-[5rem] md:text-[7rem] lg:text-[8rem] leading-[0.85] font-bold tracking-tighter mb-8 transition-colors duration-500 ${isDarkMode ? 'text-white' : 'text-dark'}`}>
-            Clone yourself.
+        <div
+          ref={contentRef}
+          className="text-center flex flex-col items-center max-w-3xl px-6 pointer-events-auto"
+        >
+          <h1
+            className={`relative text-[2rem] md:text-[3rem] lg:text-[4rem] leading-[0.9] font-black tracking-[-0.02em] mb-8 transition-all duration-700 ${
+              isDarkMode ? "text-white" : "text-gray-900"
+            }`}
+            style={{
+              background: isDarkMode
+                ? "linear-gradient(135deg, #60a5fa 0%, #a78bfa 50%,rgb(86, 175, 111) 100%)"
+                : "linear-gradient(135deg, #2563eb 0%,rgb(170, 138, 225) 50%,rgb(11, 229, 69) 100%)",
+              WebkitBackgroundClip: "text",
+              WebkitTextFillColor: "transparent",
+              backgroundClip: "text",
+              textShadow: isDarkMode
+                ? "0 0 40px rgba(59, 130, 246, 0.6), 0 0 80px rgba(147, 51, 234, 0.4)"
+                : "0 2px 10px rgba(0, 0, 0, 0.1)",
+              letterSpacing: "-0.03em",
+              filter: isDarkMode
+                ? "drop-shadow(0 0 30px rgba(59, 130, 246, 0.5))"
+                : "none",
+            }}
+          >
+            Select Your Lucky Number
           </h1>
-          
-          <p className={`text-lg md:text-xl font-normal max-w-lg leading-relaxed mb-10 transition-colors duration-500 ${isDarkMode ? 'text-gray-400' : 'text-muted'}`}>
-            Build the digital version of you to scale your expertise and availability, <span className="text-accent font-medium">infinitely</span>
-          </p>
 
-          <div className="flex items-center gap-6">
-            <button className={`rounded-full px-8 py-3.5 text-sm font-medium hover:scale-105 transition-all duration-300 ${isDarkMode ? 'bg-white text-black hover:bg-gray-200' : 'bg-dark text-white'}`}>
-              Try now
-            </button>
-            <button className={`text-sm font-medium hover:opacity-70 transition-opacity flex items-center gap-1 ${isDarkMode ? 'text-white' : 'text-dark'}`}>
-              See examples <span>→</span>
-            </button>
-          </div>
+          {/* Message Display */}
+          {message && (
+            <div
+              className={`mb-4 p-4 rounded-lg text-center ${
+                message.type === "success"
+                  ? isDarkMode
+                    ? "bg-green-900/30 text-green-400 border border-green-800"
+                    : "bg-green-50 text-green-800 border border-green-200"
+                  : isDarkMode
+                  ? "bg-red-900/30 text-red-400 border border-red-800"
+                  : "bg-red-50 text-red-800 border border-red-200"
+              }`}
+            >
+              {message.text}
+            </div>
+          )}
+
+          {/* Selected Number Display */}
+          {selectedNumber && (
+            <div
+              className={`p-4 rounded-lg text-center ${
+                isDarkMode
+                  ? "bg-blue-900/20 border border-blue-800"
+                  : "bg-blue-50 border border-blue-200"
+              }`}
+            >
+              <p
+                className={`text-lg font-medium ${
+                  isDarkMode ? "text-blue-300" : "text-blue-800"
+                }`}
+              >
+                {userHasSelected ? "Your selected number:" : "Selected:"}{" "}
+                <span className="text-3xl font-bold">{selectedNumber}</span>
+              </p>
+              {isSubmitting && (
+                <p
+                  className={`text-sm mt-2 ${
+                    isDarkMode ? "text-blue-400" : "text-blue-600"
+                  }`}
+                >
+                  Saving...
+                </p>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>
-  );
-};
+  )
+}
 
-export default Hero;
+export default Hero
