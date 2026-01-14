@@ -638,7 +638,7 @@ const Hero: React.FC<HeroProps> = ({ isDarkMode }) => {
 
     // Mouse click handler
     const onMouseClick = (event: MouseEvent) => {
-      if (userHasSelected) return
+      if (userHasSelected || showDialog) return
 
       mouseRef.current.x = (event.clientX / width) * 2 - 1
       mouseRef.current.y = -(event.clientY / height) * 2 + 1
