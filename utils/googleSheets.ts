@@ -55,7 +55,7 @@ export async function getSelectedNumbers(
     const selectedNumbers: number[] = []
     const ipNumbers = new Map<string, number>()
 
-    rows.slice(1).forEach((row: string[]) => {
+    rows.forEach((row: string[]) => {
       const number = Number(row[0])
       const ip = row[4] || "" // IP address is in column E (index 4)
 

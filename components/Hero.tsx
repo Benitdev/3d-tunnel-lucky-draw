@@ -364,7 +364,6 @@ const Hero: React.FC<HeroProps> = ({ isDarkMode }) => {
     const fetchUserIP = async () => {
       const ip = await getUserIP()
       setUserIP(ip)
-      return ip
     }
     fetchUserIP()
   }, [])
@@ -417,6 +416,8 @@ const Hero: React.FC<HeroProps> = ({ isDarkMode }) => {
         const { numbers, ipNumbers } = await getSelectedNumbers(
           GOOGLE_SHEETS_CONFIG
         )
+
+        console.log("ipNumbers", numbers)
 
         const newDisabledNumbers = new Set(numbers)
 
