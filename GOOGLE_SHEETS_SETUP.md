@@ -24,15 +24,26 @@ function doPost(e) {
     const data = JSON.parse(e.postData.contents)
 
     if (data.action === "append" && data.number) {
-      // Check if number already exists
       const existingData = sheet.getDataRange().getValues()
       const numbers = existingData.slice(1).map((row) => row[0])
+      const ipAddresses = existingData.slice(1).map((row) => row[4] || "") // IP is in column E
 
+      // Check if number already exists
       if (numbers.includes(data.number)) {
         return ContentService.createTextOutput(
           JSON.stringify({
             success: false,
             error: "Number already selected",
+          })
+        ).setMimeType(ContentService.MimeType.JSON)
+      }
+
+      // Check if IP address has already selected a number
+      if (data.ipAddress && ipAddresses.includes(data.ipAddress)) {
+        return ContentService.createTextOutput(
+          JSON.stringify({
+            success: false,
+            error: "IP address has already selected a number",
           })
         ).setMimeType(ContentService.MimeType.JSON)
       }
@@ -43,6 +54,7 @@ function doPost(e) {
         data.timestamp || new Date().toISOString(),
         data.userAgent || "",
         new Date().toISOString(),
+        data.ipAddress || "",
       ])
 
       return ContentService.createTextOutput(

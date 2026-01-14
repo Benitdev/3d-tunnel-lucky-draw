@@ -1,7 +1,11 @@
 import React, { useRef, useLayoutEffect, useEffect, useState } from "react"
 import gsap from "gsap"
 import * as THREE from "three"
-import { getSelectedNumbers, saveNumberToSheet } from "../utils/googleSheets"
+import {
+  getSelectedNumbers,
+  saveNumberToSheet,
+  getUserIP,
+} from "../utils/googleSheets"
 
 interface HeroProps {
   isDarkMode: boolean
@@ -29,15 +33,22 @@ const Hero: React.FC<HeroProps> = ({ isDarkMode }) => {
   const mouseRef = useRef<THREE.Vector2>(new THREE.Vector2())
   const numberCellsRef = useRef<Map<number, NumberCell>>(new Map())
   const hoveredCellRef = useRef<THREE.Mesh | null>(null)
+  const isHoveringRef = useRef(false)
+  const autoScrollSpeedRef = useRef(0.6) // Auto-scroll speed (pixels per frame)
 
   // State
   const [selectedNumber, setSelectedNumber] = useState<number | null>(null)
   const [userHasSelected, setUserHasSelected] = useState(false)
-  const [message, setMessage] = useState<{
-    type: "success" | "error"
-    text: string
-  } | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [showDialog, setShowDialog] = useState(false)
+  const [dialogStatus, setDialogStatus] = useState<
+    "confirm" | "success" | "error"
+  >("confirm")
+  const dialogRef = useRef<HTMLDivElement>(null)
+  const [userIP, setUserIP] = useState<string | null>(null)
+  const [userSelectedNumber, setUserSelectedNumber] = useState<number | null>(
+    null
+  )
 
   // Google Sheets config (set these in environment variables)
   const GOOGLE_SHEETS_CONFIG = {
@@ -83,10 +94,35 @@ const Hero: React.FC<HeroProps> = ({ isDarkMode }) => {
       : isDarkMode
       ? "#00F7FF"
       : "#000000"
-    context.font = "bold 200px Arial"
+
+    // Use a beautiful modern font - Space Grotesk for numbers (geometric and clean)
+    // Fallback to JetBrains Mono (monospace) or system fonts
+    context.font =
+      "700 190px 'Space Grotesk', 'JetBrains Mono', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', monospace"
     context.textAlign = "center"
     context.textBaseline = "middle"
-    context.fillText(number.toString(), 256, 256)
+
+    // Add subtle text shadow for depth and readability
+    context.shadowColor = isDisabled
+      ? isDarkMode
+        ? "rgba(246, 48, 73, 0.4)"
+        : "rgba(0, 0, 0, 0.25)"
+      : isDarkMode
+      ? "rgba(0, 247, 255, 0.5)"
+      : "rgba(0, 0, 0, 0.2)"
+    context.shadowBlur = 10
+    context.shadowOffsetX = 3
+    context.shadowOffsetY = 3
+
+    // Pad number with zeros (001, 002, ..., 100)
+    const paddedNumber = number.toString().padStart(3, "0")
+    context.fillText(paddedNumber, 256, 256)
+
+    // Reset shadow
+    context.shadowColor = "transparent"
+    context.shadowBlur = 0
+    context.shadowOffsetX = 0
+    context.shadowOffsetY = 0
 
     const texture = new THREE.CanvasTexture(canvas)
     texture.needsUpdate = true
@@ -324,6 +360,15 @@ const Hero: React.FC<HeroProps> = ({ isDarkMode }) => {
     }
   }
 
+  useEffect(() => {
+    const fetchUserIP = async () => {
+      const ip = await getUserIP()
+      setUserIP(ip)
+      return ip
+    }
+    fetchUserIP()
+  }, [])
+
   // --- INITIAL SETUP ---
   useEffect(() => {
     if (!canvasRef.current || !containerRef.current) return
@@ -369,8 +414,57 @@ const Hero: React.FC<HeroProps> = ({ isDarkMode }) => {
       }
 
       try {
-        const selectedNumbers = await getSelectedNumbers(GOOGLE_SHEETS_CONFIG)
-        const newDisabledNumbers = new Set(selectedNumbers)
+        const { numbers, ipNumbers } = await getSelectedNumbers(
+          GOOGLE_SHEETS_CONFIG
+        )
+
+        const newDisabledNumbers = new Set(numbers)
+
+        // Check if current IP has already selected a number
+        if (userIP && ipNumbers.has(userIP)) {
+          const ipSelectedNumber = ipNumbers.get(userIP)!
+          setUserSelectedNumber(ipSelectedNumber)
+          setUserHasSelected(true)
+          setSelectedNumber(ipSelectedNumber)
+
+          // Disable all numbers since user has already selected
+          numberCellsRef.current.forEach((cell) => {
+            cell.isDisabled = true
+            if (cell.mesh) {
+              cell.mesh.userData.isDisabled = true
+            }
+          })
+
+          // Update all segments to disable all numbers
+          if (sceneRef.current) {
+            sceneRef.current.traverse((obj) => {
+              if (obj.userData.type === "numberCell") {
+                obj.userData.isDisabled = true
+                obj.traverse((child) => {
+                  if (child instanceof THREE.Mesh) {
+                    const material = child.material
+                    if (material instanceof THREE.MeshBasicMaterial) {
+                      if (!material.map) {
+                        material.color.setHex(isDarkMode ? 0x333333 : 0xeeeeee)
+                        material.opacity = 0.3
+                      } else {
+                        material.opacity = 0.6
+                        const num = obj.userData.number
+                        const oldTexture = material.map
+                        const newTexture = createNumberTexture(num, true)
+                        material.map = newTexture
+                        if (oldTexture) {
+                          oldTexture.dispose()
+                        }
+                      }
+                      material.needsUpdate = true
+                    }
+                  }
+                })
+              }
+            })
+          }
+        }
 
         // Update number cells and their visual appearance
         newDisabledNumbers.forEach((num) => {
@@ -461,22 +555,16 @@ const Hero: React.FC<HeroProps> = ({ isDarkMode }) => {
       }
     }
 
-    // Load disabled numbers initially
-    updateDisabledNumbers()
-
+    if (userIP) {
+      updateDisabledNumbers()
+    }
     // Set up interval to check for new disabled numbers every 10 seconds
     const intervalId = setInterval(updateDisabledNumbers, 10000)
 
-    // Check if user has already selected
-    const savedSelection = localStorage.getItem("userNumberSelection")
-    if (savedSelection) {
-      const parsed = JSON.parse(savedSelection)
-      setUserHasSelected(true)
-      setSelectedNumber(parsed.number)
-    }
-
     // Mouse move handler for hover
     const onMouseMove = (event: MouseEvent) => {
+      if (showDialog) return
+
       mouseRef.current.x = (event.clientX / width) * 2 - 1
       mouseRef.current.y = -(event.clientY / height) * 2 + 1
 
@@ -528,6 +616,7 @@ const Hero: React.FC<HeroProps> = ({ isDarkMode }) => {
         // Set new hover
         hoveredCellRef.current = currentHovered as THREE.Group | null
         if (hoveredCellRef.current) {
+          isHoveringRef.current = true
           gsap.to(hoveredCellRef.current.scale, {
             x: 1.2,
             y: 1.2,
@@ -538,6 +627,7 @@ const Hero: React.FC<HeroProps> = ({ isDarkMode }) => {
             canvasRef.current.style.cursor = "pointer"
           }
         } else {
+          isHoveringRef.current = false
           if (canvasRef.current) {
             canvasRef.current.style.cursor = "default"
           }
@@ -591,6 +681,11 @@ const Hero: React.FC<HeroProps> = ({ isDarkMode }) => {
       if (!cameraRef.current || !sceneRef.current || !rendererRef.current)
         return
 
+      // Auto-scroll: slowly increase scroll position when not hovering
+      if (!isHoveringRef.current && !userHasSelected) {
+        scrollPosRef.current += autoScrollSpeedRef.current
+      }
+
       const targetZ = -scrollPosRef.current * 0.05
       const currentZ = cameraRef.current.position.z
       cameraRef.current.position.z += (targetZ - currentZ) * 0.1
@@ -640,6 +735,17 @@ const Hero: React.FC<HeroProps> = ({ isDarkMode }) => {
       scrollPosRef.current = window.scrollY
     }
     window.addEventListener("scroll", onScroll)
+
+    // Also allow mouse wheel to control scroll
+    const onWheel = (event: WheelEvent) => {
+      if (!showDialog) {
+        scrollPosRef.current += event.deltaY * 0.5
+        // Prevent default scrolling behavior
+        event.preventDefault()
+      }
+    }
+    window.addEventListener("wheel", onWheel, { passive: false })
+
     const handleResize = () => {
       const w = window.innerWidth
       const h = window.innerHeight
@@ -651,6 +757,7 @@ const Hero: React.FC<HeroProps> = ({ isDarkMode }) => {
 
     return () => {
       window.removeEventListener("scroll", onScroll)
+      window.removeEventListener("wheel", onWheel)
       window.removeEventListener("resize", handleResize)
       window.removeEventListener("mousemove", onMouseMove)
       window.removeEventListener("click", onMouseClick)
@@ -658,26 +765,52 @@ const Hero: React.FC<HeroProps> = ({ isDarkMode }) => {
       cancelAnimationFrame(frameId)
       renderer.dispose()
     }
-  }, []) // Run once on mount
+  }, [showDialog, userIP]) // Run once on mount
 
   // Handle number selection
   const handleNumberSelect = async (number: number) => {
-    if (userHasSelected) {
-      setMessage({ type: "error", text: "You have already selected a number!" })
+    // Check if user has already selected (by IP or localStorage)
+    if (userHasSelected || userSelectedNumber) {
+      setDialogStatus("error")
+      setShowDialog(true)
+      // Animate dialog in
+      if (dialogRef.current) {
+        gsap.fromTo(
+          dialogRef.current,
+          { opacity: 0, scale: 0.8, y: 20 },
+          { opacity: 1, scale: 1, y: 0, duration: 0.3, ease: "back.out(1.7)" }
+        )
+      }
       return
     }
 
     const cell = numberCellsRef.current.get(number)
     if (cell?.isDisabled) {
-      setMessage({
-        type: "error",
-        text: "This number has already been selected by someone else.",
-      })
+      setDialogStatus("error")
+      setShowDialog(true)
+      // Animate dialog in
+      if (dialogRef.current) {
+        gsap.fromTo(
+          dialogRef.current,
+          { opacity: 0, scale: 0.8, y: 20 },
+          { opacity: 1, scale: 1, y: 0, duration: 0.3, ease: "back.out(1.7)" }
+        )
+      }
       return
     }
 
     setSelectedNumber(number)
-    setMessage(null)
+    setDialogStatus("confirm")
+    setShowDialog(true)
+
+    // Animate dialog in
+    if (dialogRef.current) {
+      gsap.fromTo(
+        dialogRef.current,
+        { opacity: 0, scale: 0.8, y: 20 },
+        { opacity: 1, scale: 1, y: 0, duration: 0.3, ease: "back.out(1.7)" }
+      )
+    }
 
     // Visual feedback
     if (cell?.mesh) {
@@ -689,181 +822,6 @@ const Hero: React.FC<HeroProps> = ({ isDarkMode }) => {
         yoyo: true,
         repeat: 1,
       })
-    }
-
-    // Save to Google Sheets
-    setIsSubmitting(true)
-    try {
-      if (GOOGLE_SHEETS_CONFIG.scriptUrl) {
-        const result = await saveNumberToSheet(number, {
-          scriptUrl: GOOGLE_SHEETS_CONFIG.scriptUrl,
-        })
-
-        if (result.success) {
-          // Save to localStorage
-          localStorage.setItem(
-            "userNumberSelection",
-            JSON.stringify({
-              number,
-              timestamp: new Date().toISOString(),
-            })
-          )
-
-          setUserHasSelected(true)
-          setMessage({
-            type: "success",
-            text: `Number ${number} has been saved successfully!`,
-          })
-
-          // Update cell state
-          if (cell) {
-            cell.isDisabled = true
-            cell.isSelected = true
-          } else {
-            // Create cell entry if it doesn't exist
-            numberCellsRef.current.set(number, {
-              number,
-              mesh: null,
-              isSelected: true,
-              isDisabled: true,
-            })
-          }
-
-          // Immediately update visual appearance of the selected number
-          const updateNumberVisual = (mesh: THREE.Object3D) => {
-            if (!mesh) return
-
-            // Update userData
-            mesh.userData.isDisabled = true
-
-            // Traverse and update all child meshes
-            mesh.traverse((child) => {
-              if (child instanceof THREE.Mesh) {
-                const material = child.material
-                if (material instanceof THREE.MeshBasicMaterial) {
-                  // Update background plane (no texture)
-                  if (!material.map) {
-                    material.color.setHex(isDarkMode ? 0x333333 : 0xeeeeee)
-                    material.opacity = 0.3
-                    material.needsUpdate = true
-                  } else {
-                    // Update number texture plane
-                    material.opacity = 0.6
-                    // Create and update texture
-                    const oldTexture = material.map
-                    const newTexture = createNumberTexture(number, true)
-                    material.map = newTexture
-                    material.needsUpdate = true
-                    // Dispose old texture
-                    if (oldTexture) {
-                      oldTexture.dispose()
-                    }
-                  }
-                }
-              }
-            })
-          }
-
-          // Update the specific mesh if it exists
-          if (cell?.mesh) {
-            updateNumberVisual(cell.mesh)
-          }
-
-          // Update all instances of this number in all segments
-          if (sceneRef.current) {
-            sceneRef.current.traverse((obj) => {
-              if (
-                obj.userData.type === "numberCell" &&
-                obj.userData.number === number
-              ) {
-                updateNumberVisual(obj)
-              }
-            })
-          }
-        } else {
-          setMessage({
-            type: "error",
-            text: result.error || "Failed to save number. Please try again.",
-          })
-        }
-      } else {
-        // No Google Sheets configured, just save locally
-        localStorage.setItem(
-          "userNumberSelection",
-          JSON.stringify({
-            number,
-            timestamp: new Date().toISOString(),
-          })
-        )
-        setUserHasSelected(true)
-        setMessage({
-          type: "success",
-          text: `Number ${number} selected! (Not saved to Google Sheets - configure API to save)`,
-        })
-
-        // Update cell state and visual appearance even without Google Sheets
-        if (cell) {
-          cell.isDisabled = true
-          cell.isSelected = true
-        } else {
-          numberCellsRef.current.set(number, {
-            number,
-            mesh: null,
-            isSelected: true,
-            isDisabled: true,
-          })
-        }
-
-        // Update visual appearance
-        const updateNumberVisual = (mesh: THREE.Object3D) => {
-          if (!mesh) return
-          mesh.userData.isDisabled = true
-          mesh.traverse((child) => {
-            if (child instanceof THREE.Mesh) {
-              const material = child.material
-              if (material instanceof THREE.MeshBasicMaterial) {
-                if (!material.map) {
-                  material.color.setHex(isDarkMode ? 0x333333 : 0xeeeeee)
-                  material.opacity = 0.3
-                  material.needsUpdate = true
-                } else {
-                  material.opacity = 0.6
-                  const oldTexture = material.map
-                  const newTexture = createNumberTexture(number, true)
-                  material.map = newTexture
-                  material.needsUpdate = true
-                  if (oldTexture) {
-                    oldTexture.dispose()
-                  }
-                }
-              }
-            }
-          })
-        }
-
-        if (cell?.mesh) {
-          updateNumberVisual(cell.mesh)
-        }
-
-        if (sceneRef.current) {
-          sceneRef.current.traverse((obj) => {
-            if (
-              obj.userData.type === "numberCell" &&
-              obj.userData.number === number
-            ) {
-              updateNumberVisual(obj)
-            }
-          })
-        }
-      }
-    } catch (error) {
-      console.error("Error saving number:", error)
-      setMessage({
-        type: "error",
-        text: "Failed to save number. Please try again.",
-      })
-    } finally {
-      setIsSubmitting(false)
     }
   }
 
@@ -919,92 +877,390 @@ const Hero: React.FC<HeroProps> = ({ isDarkMode }) => {
   }, [])
 
   return (
-    <div
-      ref={containerRef}
-      className={`relative w-full h-[10000vh] transition-colors duration-700 ${
-        isDarkMode ? "bg-[#050505]" : "bg-white"
-      }`}
-    >
-      <div className="fixed inset-0 w-full h-full overflow-hidden z-0">
-        <canvas ref={canvasRef} className="w-full h-full block" />
-      </div>
+    <>
+      <style>{`
+        @keyframes gradient {
+          0% { background-position: 0% 50%; }
+          50% { background-position: 100% 50%; }
+          100% { background-position: 0% 50%; }
+        }
+      `}</style>
+      <div
+        ref={containerRef}
+        className={`relative w-full h-[10000vh] transition-colors duration-700 ${
+          isDarkMode ? "bg-[#050505]" : "bg-white"
+        }`}
+      >
+        <div className="fixed inset-0 w-full h-full overflow-hidden z-0">
+          <canvas ref={canvasRef} className="w-full h-full block" />
+        </div>
 
-      <div className="fixed inset-0 z-10 flex items-center justify-center pointer-events-none">
-        <div
-          ref={contentRef}
-          className="text-center flex flex-col items-center max-w-3xl px-6 pointer-events-auto"
-        >
-          <h1
-            className={`relative text-[2rem] md:text-[3rem] lg:text-[4rem] leading-[0.9] font-black tracking-[-0.02em] mb-8 transition-all duration-700 ${
-              isDarkMode ? "text-white" : "text-gray-900"
-            }`}
-            style={{
-              background: isDarkMode
-                ? "linear-gradient(135deg, #60a5fa 0%, #a78bfa 50%,rgb(86, 175, 111) 100%)"
-                : "linear-gradient(135deg, #2563eb 0%,rgb(170, 138, 225) 50%,rgb(11, 229, 69) 100%)",
-              WebkitBackgroundClip: "text",
-              WebkitTextFillColor: "transparent",
-              backgroundClip: "text",
-              textShadow: isDarkMode
-                ? "0 0 40px rgba(59, 130, 246, 0.6), 0 0 80px rgba(147, 51, 234, 0.4)"
-                : "0 2px 10px rgba(0, 0, 0, 0.1)",
-              letterSpacing: "-0.03em",
-              filter: isDarkMode
-                ? "drop-shadow(0 0 30px rgba(59, 130, 246, 0.5))"
-                : "none",
-            }}
+        <div className="fixed inset-0 z-10 flex items-center justify-center pointer-events-none">
+          <div
+            ref={contentRef}
+            className="text-center flex flex-col items-center max-w-3xl px-6"
           >
-            Select Your Lucky Number
-          </h1>
-
-          {/* Message Display */}
-          {message && (
-            <div
-              className={`mb-4 p-4 rounded-lg text-center ${
-                message.type === "success"
-                  ? isDarkMode
-                    ? "bg-green-900/30 text-green-400 border border-green-800"
-                    : "bg-green-50 text-green-800 border border-green-200"
-                  : isDarkMode
-                  ? "bg-red-900/30 text-red-400 border border-red-800"
-                  : "bg-red-50 text-red-800 border border-red-200"
+            <h1
+              className={`relative text-[2rem] md:text-[2rem] lg:text-[3rem] leading-[0.9] font-black tracking-[-0.02em] mb-8 transition-all duration-700 ${
+                isDarkMode ? "text-white" : "text-gray-900"
               }`}
+              style={{
+                background: isDarkMode
+                  ? "linear-gradient(135deg, #60a5fa 0%, #a78bfa 50%,rgb(86, 175, 111) 100%)"
+                  : "linear-gradient(135deg, #2563eb 0%,rgb(170, 138, 225) 50%,rgb(11, 229, 69) 100%)",
+                WebkitBackgroundClip: "text",
+                WebkitTextFillColor: "transparent",
+                backgroundClip: "text",
+                textShadow: isDarkMode
+                  ? "0 0 40px rgba(59, 130, 246, 0.6), 0 0 80px rgba(147, 51, 234, 0.4)"
+                  : "0 2px 10px rgba(0, 0, 0, 0.1)",
+                letterSpacing: "-0.03em",
+                filter: isDarkMode
+                  ? "drop-shadow(0 0 30px rgba(59, 130, 246, 0.5))"
+                  : "none",
+              }}
             >
-              {message.text}
-            </div>
-          )}
-
-          {/* Selected Number Display */}
-          {selectedNumber && (
-            <div
-              className={`p-4 rounded-lg text-center ${
-                isDarkMode
-                  ? "bg-blue-900/20 border border-blue-800"
-                  : "bg-blue-50 border border-blue-200"
-              }`}
-            >
-              <p
-                className={`text-lg font-medium ${
-                  isDarkMode ? "text-blue-300" : "text-blue-800"
-                }`}
-              >
-                {userHasSelected ? "Your selected number:" : "Selected:"}{" "}
-                <span className="text-3xl font-bold">{selectedNumber}</span>
-              </p>
-              {isSubmitting && (
-                <p
-                  className={`text-sm mt-2 ${
-                    isDarkMode ? "text-blue-400" : "text-blue-600"
-                  }`}
-                >
-                  Saving...
-                </p>
+              {userHasSelected && userSelectedNumber ? (
+                <>
+                  🎉 Your Lucky Number is{" "}
+                  {userSelectedNumber?.toString().padStart(3, "0")} 🎉
+                </>
+              ) : (
+                "Select Your Lucky Number"
               )}
-            </div>
-          )}
+            </h1>
+          </div>
         </div>
       </div>
-    </div>
+      {/* Confirmation Dialog */}
+      {showDialog && selectedNumber && (
+        <div
+          ref={dialogRef}
+          className={`fixed h-screen w-screen top-0 left-0 z-50 flex items-center justify-center pointer-events-auto ${
+            isDarkMode ? "bg-black/20" : "bg-black/40"
+          } backdrop-blur-sm`}
+          onClick={(e) => {
+            // Close on backdrop click only if error
+            if (e.target === e.currentTarget && dialogStatus === "error") {
+              setShowDialog(false)
+            }
+          }}
+        >
+          <div
+            className={`relative w-full max-w-md mx-4 bg-opacity-80 rounded-2xl shadow-2xl overflow-hidden ${
+              dialogStatus === "success"
+                ? isDarkMode
+                  ? "bg-gradient-to-br from-green-900/90 to-emerald-900/90 border-2 border-green-500"
+                  : "bg-gradient-to-br from-green-50 to-emerald-50 border-2 border-green-400"
+                : dialogStatus === "error"
+                ? isDarkMode
+                  ? "bg-gradient-to-br from-red-900/90 to-rose-900/90 border-2 border-red-500"
+                  : "bg-gradient-to-br from-red-50 to-rose-50 border-2 border-red-400"
+                : isDarkMode
+                ? "bg-gradient-to-br from-blue-900/90 to-indigo-900/90 border-2 border-blue-500"
+                : "bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-400"
+            }`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Animated background glow */}
+            <div
+              className={`absolute inset-0 opacity-20 ${
+                dialogStatus === "success"
+                  ? "bg-gradient-to-r from-green-400 via-emerald-400 to-green-400 animate-pulse"
+                  : dialogStatus === "error"
+                  ? "bg-gradient-to-r from-red-400 via-rose-400 to-red-400"
+                  : "bg-gradient-to-r from-blue-400 via-indigo-400 to-blue-400"
+              }`}
+              style={{
+                backgroundSize: "200% 200%",
+                animation:
+                  dialogStatus === "confirm"
+                    ? "gradient 3s ease infinite"
+                    : "none",
+              }}
+            />
+
+            <div className="relative z-10 p-8 text-center">
+              {dialogStatus === "confirm" && (
+                <>
+                  <img
+                    src="/kozocom-logo.png"
+                    alt="Logo"
+                    className="w-60 h-20 mb-2 block mx-auto"
+                  />
+                  <div className="mb-6">
+                    <div
+                      className={`mx-auto w-32 h-32 rounded-full flex items-center justify-center text-6xl font-bold ${
+                        isDarkMode
+                          ? "bg-blue-500/20 text-blue-300"
+                          : "bg-blue-500/10 text-blue-600"
+                      }`}
+                    >
+                      {selectedNumber?.toString().padStart(3, "0")}
+                    </div>
+                  </div>
+                  <h2
+                    className={`text-2xl font-bold mb-4 ${
+                      isDarkMode ? "text-white" : "text-gray-900"
+                    }`}
+                  >
+                    Confirm Your Selection
+                  </h2>
+
+                  <p
+                    className={`text-sm mb-6 ${
+                      isDarkMode ? "text-gray-400" : "text-gray-500"
+                    }`}
+                  >
+                    Are you sure you want to select this number?
+                  </p>
+                  <div className="flex gap-4 justify-center">
+                    <button
+                      onClick={() => {
+                        setShowDialog(false)
+                        setSelectedNumber(null)
+                      }}
+                      className={`px-6 py-3 rounded-lg font-medium transition-all duration-300 hover:scale-105 ${
+                        isDarkMode
+                          ? "bg-gray-700 text-white hover:bg-gray-600"
+                          : "bg-gray-200 text-gray-800 hover:bg-gray-300"
+                      }`}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={async () => {
+                        if (!selectedNumber) return
+                        setIsSubmitting(true)
+
+                        // Save to Google Sheets
+                        try {
+                          if (GOOGLE_SHEETS_CONFIG.scriptUrl) {
+                            const currentIP = userIP || (await getUserIP())
+                            if (currentIP && currentIP !== "unknown") {
+                              setUserIP(currentIP)
+                            }
+                            const result = await saveNumberToSheet(
+                              selectedNumber,
+                              currentIP || "unknown",
+                              {
+                                scriptUrl: GOOGLE_SHEETS_CONFIG.scriptUrl,
+                              }
+                            )
+
+                            if (result.success) {
+                              setUserHasSelected(true)
+                              setDialogStatus("success")
+
+                              // Animate success transition
+                              if (dialogRef.current) {
+                                gsap.to(dialogRef.current, {
+                                  scale: 1.05,
+                                  duration: 0.2,
+                                  yoyo: true,
+                                  repeat: 1,
+                                  ease: "power2.inOut",
+                                })
+                              }
+
+                              // Update visual appearance
+                              const cell =
+                                numberCellsRef.current.get(selectedNumber)
+                              if (cell) {
+                                cell.isDisabled = true
+                                cell.isSelected = true
+                              }
+
+                              // Update visual appearance of the selected number
+                              const updateNumberVisual = (
+                                mesh: THREE.Object3D
+                              ) => {
+                                if (!mesh) return
+                                mesh.userData.isDisabled = true
+                                mesh.traverse((child) => {
+                                  if (child instanceof THREE.Mesh) {
+                                    const material = child.material
+                                    if (
+                                      material instanceof
+                                      THREE.MeshBasicMaterial
+                                    ) {
+                                      if (!material.map) {
+                                        material.color.setHex(
+                                          isDarkMode ? 0x333333 : 0xeeeeee
+                                        )
+                                        material.opacity = 0.3
+                                        material.needsUpdate = true
+                                      } else {
+                                        material.opacity = 0.6
+                                        const oldTexture = material.map
+                                        const newTexture = createNumberTexture(
+                                          selectedNumber,
+                                          true
+                                        )
+                                        material.map = newTexture
+                                        material.needsUpdate = true
+                                        if (oldTexture) {
+                                          oldTexture.dispose()
+                                        }
+                                      }
+                                    }
+                                  }
+                                })
+                              }
+
+                              if (cell?.mesh) {
+                                updateNumberVisual(cell.mesh)
+                              }
+
+                              if (sceneRef.current) {
+                                sceneRef.current.traverse((obj) => {
+                                  if (
+                                    obj.userData.type === "numberCell" &&
+                                    obj.userData.number === selectedNumber
+                                  ) {
+                                    updateNumberVisual(obj)
+                                  }
+                                })
+                              }
+                            } else {
+                              setDialogStatus("error")
+                            }
+                          } else {
+                            setUserHasSelected(true)
+                            setDialogStatus("success")
+
+                            // Update visual
+                            const cell =
+                              numberCellsRef.current.get(selectedNumber)
+                            if (cell) {
+                              cell.isDisabled = true
+                              cell.isSelected = true
+                            }
+                          }
+                        } catch (error) {
+                          console.error("Error saving number:", error)
+                          setDialogStatus("error")
+                        } finally {
+                          setIsSubmitting(false)
+                        }
+                      }}
+                      disabled={isSubmitting}
+                      className={`px-6 py-3 rounded-lg font-medium transition-all duration-300 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed ${
+                        isDarkMode
+                          ? "bg-blue-500 text-white hover:bg-blue-600"
+                          : "bg-blue-600 text-white hover:bg-blue-700"
+                      }`}
+                    >
+                      {isSubmitting ? "Saving..." : "Confirm"}
+                    </button>
+                  </div>
+                </>
+              )}
+
+              {dialogStatus === "success" && (
+                <>
+                  <div className="mb-6">
+                    <div className="mx-auto w-24 h-24 rounded-full flex items-center justify-center bg-green-500/20 animate-pulse">
+                      <svg
+                        className="w-16 h-16 text-green-400"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={3}
+                          d="M5 13l4 4L19 7"
+                        />
+                      </svg>
+                    </div>
+                  </div>
+                  <h2
+                    className={`text-3xl font-bold mb-4 ${
+                      isDarkMode ? "text-green-300" : "text-green-700"
+                    }`}
+                  >
+                    🎉 Congratulations! 🎉
+                  </h2>
+                  <p
+                    className={`text-xl mb-2 font-semibold ${
+                      isDarkMode ? "text-white" : "text-gray-900"
+                    }`}
+                  >
+                    Number {selectedNumber} is yours!
+                  </p>
+                  <p
+                    className={`text-sm mb-6 ${
+                      isDarkMode ? "text-gray-300" : "text-gray-600"
+                    }`}
+                  >
+                    Your selection has been saved successfully.
+                  </p>
+                  <button
+                    className={`px-8 py-3 rounded-lg font-medium transition-all duration-300 hover:scale-105 ${
+                      isDarkMode
+                        ? "bg-green-500 text-white hover:bg-green-600"
+                        : "bg-green-600 text-white hover:bg-green-700"
+                    }`}
+                  >
+                    Awesome!
+                  </button>
+                </>
+              )}
+
+              {dialogStatus === "error" && (
+                <>
+                  <div className="mb-6">
+                    <div className="mx-auto w-24 h-24 rounded-full flex items-center justify-center bg-red-500/20">
+                      <svg
+                        className="w-16 h-16 text-red-400"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M6 18L18 6M6 6l12 12"
+                        />
+                      </svg>
+                    </div>
+                  </div>
+                  <h2
+                    className={`text-2xl font-bold mb-4 ${
+                      isDarkMode ? "text-red-300" : "text-red-700"
+                    }`}
+                  >
+                    Unable to Select
+                  </h2>
+                  <p
+                    className={`text-lg mb-6 ${
+                      isDarkMode ? "text-gray-300" : "text-gray-600"
+                    }`}
+                  >
+                    {userHasSelected
+                      ? "You have already selected a number!"
+                      : "This number has already been selected by someone else."}
+                  </p>
+                  <button
+                    onClick={() => setShowDialog(false)}
+                    className={`px-8 py-3 rounded-lg font-medium transition-all duration-300 hover:scale-105 ${
+                      isDarkMode
+                        ? "bg-red-500 text-white hover:bg-red-600"
+                        : "bg-red-600 text-white hover:bg-red-700"
+                    }`}
+                  >
+                    OK
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   )
 }
 
