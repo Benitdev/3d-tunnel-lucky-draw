@@ -34,9 +34,10 @@ const Hero: React.FC<HeroProps> = ({ isDarkMode }) => {
   const numberCellsRef = useRef<Map<number, NumberCell>>(new Map())
   const hoveredCellRef = useRef<THREE.Mesh | null>(null)
   const isHoveringRef = useRef(false)
-  const autoScrollSpeedRef = useRef(0.6) // Auto-scroll speed (pixels per frame)
+  const autoScrollSpeedRef = useRef(0.8) // Auto-scroll speed (pixels per frame)
 
   // State
+  const [loading, setLoading] = useState(true)
   const [selectedNumber, setSelectedNumber] = useState<number | null>(null)
   const [userHasSelected, setUserHasSelected] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -408,7 +409,11 @@ const Hero: React.FC<HeroProps> = ({ isDarkMode }) => {
 
     // Function to update disabled numbers from Google Sheets
     const updateDisabledNumbers = async () => {
-      if (!GOOGLE_SHEETS_CONFIG.spreadsheetId || !GOOGLE_SHEETS_CONFIG.apiKey) {
+      if (
+        !GOOGLE_SHEETS_CONFIG.spreadsheetId ||
+        !GOOGLE_SHEETS_CONFIG.apiKey ||
+        userHasSelected
+      ) {
         return
       }
 
@@ -416,8 +421,7 @@ const Hero: React.FC<HeroProps> = ({ isDarkMode }) => {
         const { numbers, ipNumbers } = await getSelectedNumbers(
           GOOGLE_SHEETS_CONFIG
         )
-
-        console.log("ipNumbers", numbers)
+        setLoading(false)
 
         const newDisabledNumbers = new Set(numbers)
 
@@ -559,12 +563,12 @@ const Hero: React.FC<HeroProps> = ({ isDarkMode }) => {
     if (userIP) {
       updateDisabledNumbers()
     }
-    // Set up interval to check for new disabled numbers every 10 seconds
-    const intervalId = setInterval(updateDisabledNumbers, 10000)
+    // Set up interval to check for new disabled numbers every 1 seconds
+    const intervalId = setInterval(updateDisabledNumbers, 1000)
 
     // Mouse move handler for hover
     const onMouseMove = (event: MouseEvent) => {
-      if (showDialog) return
+      if (showDialog || loading) return
 
       mouseRef.current.x = (event.clientX / width) * 2 - 1
       mouseRef.current.y = -(event.clientY / height) * 2 + 1
@@ -638,7 +642,7 @@ const Hero: React.FC<HeroProps> = ({ isDarkMode }) => {
 
     // Mouse click handler
     const onMouseClick = (event: MouseEvent) => {
-      if (userHasSelected || showDialog) return
+      if (userHasSelected || showDialog || loading) return
 
       mouseRef.current.x = (event.clientX / width) * 2 - 1
       mouseRef.current.y = -(event.clientY / height) * 2 + 1
@@ -683,7 +687,7 @@ const Hero: React.FC<HeroProps> = ({ isDarkMode }) => {
         return
 
       // Auto-scroll: slowly increase scroll position when not hovering
-      if (!isHoveringRef.current && !userHasSelected) {
+      if (!isHoveringRef.current) {
         scrollPosRef.current += autoScrollSpeedRef.current
       }
 
@@ -766,7 +770,7 @@ const Hero: React.FC<HeroProps> = ({ isDarkMode }) => {
       cancelAnimationFrame(frameId)
       renderer.dispose()
     }
-  }, [showDialog, userIP]) // Run once on mount
+  }, [showDialog, userIP, loading]) // Run once on mount
 
   // Handle number selection
   const handleNumberSelect = async (number: number) => {
@@ -856,7 +860,7 @@ const Hero: React.FC<HeroProps> = ({ isDarkMode }) => {
         }
       })
     })
-  }, [isDarkMode])
+  }, [])
 
   // Text Entrance Animation
   useLayoutEffect(() => {
