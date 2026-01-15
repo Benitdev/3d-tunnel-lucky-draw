@@ -1202,7 +1202,8 @@ const Hero: React.FC<HeroProps> = ({ isDarkMode }) => {
                       isDarkMode ? "text-white" : "text-gray-900"
                     }`}
                   >
-                    Number {selectedNumber} is yours!
+                    Number {selectedNumber.toString()?.padStart(3, "0")} is
+                    yours!
                   </p>
                   <p
                     className={`text-sm mb-6 ${
