@@ -564,7 +564,7 @@ const Hero: React.FC<HeroProps> = ({ isDarkMode }) => {
       updateDisabledNumbers()
     }
     // Set up interval to check for new disabled numbers every 1 seconds
-    const intervalId = setInterval(updateDisabledNumbers, 1000)
+    const intervalId = setInterval(updateDisabledNumbers, 6000)
 
     // Mouse move handler for hover
     const onMouseMove = (event: MouseEvent) => {
@@ -1041,13 +1041,22 @@ const Hero: React.FC<HeroProps> = ({ isDarkMode }) => {
                         // Save to Google Sheets
                         try {
                           if (GOOGLE_SHEETS_CONFIG.scriptUrl) {
-                            const currentIP = userIP || (await getUserIP())
-                            if (currentIP && currentIP !== "unknown") {
-                              setUserIP(currentIP)
+                            // INSERT_YOUR_CODE
+                            // Before saving, check if the number is already in Google Sheet (avoid double-select)
+                            const { numbers } = await getSelectedNumbers(
+                              GOOGLE_SHEETS_CONFIG
+                            )
+                            if (numbers.includes(selectedNumber)) {
+                              setIsSubmitting(false)
+                              setDialogStatus("error")
+                              setShowDialog(true)
+                              // Optionally provide feedback ("Number already taken")
+                              return
                             }
+
                             const result = await saveNumberToSheet(
                               selectedNumber,
-                              currentIP || "unknown",
+                              userIP || "unknown",
                               {
                                 scriptUrl: GOOGLE_SHEETS_CONFIG.scriptUrl,
                               }
