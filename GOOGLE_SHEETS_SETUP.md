@@ -1,5 +1,42 @@
 # Google Sheets Setup Guide
 
+This app uses Google OAuth for user authentication and saves number selections to Google Sheets.
+
+## Prerequisites: Google OAuth Setup
+
+Before setting up Google Sheets, you need to configure Google OAuth:
+
+1. **Create OAuth 2.0 Credentials**
+
+   - Go to [Google Cloud Console](https://console.cloud.google.com/)
+   - Create a new project or select an existing one
+   - Navigate to "APIs & Services" > "Credentials"
+   - Click "Create Credentials" > "OAuth client ID"
+   - If prompted, configure the OAuth consent screen:
+     - User Type: External (or Internal if using Google Workspace)
+     - App name: Your app name
+     - User support email: Your email
+     - Developer contact: Your email
+     - Click "Save and Continue" through the scopes and test users screens
+   - Application type: "Web application"
+   - Name: Your app name
+   - Authorized JavaScript origins: Add your app URL (e.g., `http://localhost:5173` for local dev, or your production URL)
+   - Authorized redirect URIs: Add your app URL (same as above)
+   - Click "Create"
+   - **Copy the Client ID** - you'll need this for your `.env` file
+
+2. **Add Client ID to Environment Variables**
+
+   - Add `VITE_GOOGLE_CLIENT_ID=your_client_id_here` to your `.env` file
+
+3. **Restrict Access to Organization Domain (Optional)**
+   - To restrict access to only Google accounts from a specific organization (e.g., `company.com`), add the following to your `.env` file:
+   - `VITE_ALLOWED_GOOGLE_DOMAIN=company.com`
+   - **Note:** The `hosted_domain` parameter only works for Google Workspace domains. For personal Gmail accounts, domain validation happens after login and will show an error message.
+   - If you leave this variable empty or unset, all Google accounts will be allowed.
+
+## Google Sheets Setup
+
 This app saves number selections to Google Sheets. You have two options:
 
 ## Option 1: Google Apps Script (Recommended for Client-Side)
@@ -11,7 +48,9 @@ This is the most secure way to write to Google Sheets from the client.
 1. **Create a Google Sheet**
 
    - Create a new Google Sheet
-   - Add headers in row 1: `Number | Timestamp | User Agent | Saved At`
+   - Add headers in row 1: `userName | selectedNumber`
+   - Column A: userName (the Google user's name)
+   - Column B: selectedNumber (the selected number 1-100)
 
 2. **Create a Google Apps Script**
    - In your Google Sheet, go to `Extensions` > `Apps Script`
@@ -23,13 +62,13 @@ function doPost(e) {
     const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet()
     const data = JSON.parse(e.postData.contents)
 
-    if (data.action === "append" && data.number) {
+    if (data.action === "append" && data.selectedNumber && data.userName) {
       const existingData = sheet.getDataRange().getValues()
-      const numbers = existingData.slice(1).map((row) => row[0])
-      const ipAddresses = existingData.slice(1).map((row) => row[4] || "") // IP is in column E
+      const numbers = existingData.slice(1).map((row) => Number(row[1]) || 0) // Column B: selectedNumber
+      const userNames = existingData.slice(1).map((row) => row[0] || "") // Column A: userName
 
       // Check if number already exists
-      if (numbers.includes(data.number)) {
+      if (numbers.includes(data.selectedNumber)) {
         return ContentService.createTextOutput(
           JSON.stringify({
             success: false,
@@ -38,24 +77,18 @@ function doPost(e) {
         ).setMimeType(ContentService.MimeType.JSON)
       }
 
-      // Check if IP address has already selected a number
-      if (data.ipAddress && ipAddresses.includes(data.ipAddress)) {
+      // Check if user has already selected a number
+      if (data.userName && userNames.includes(data.userName)) {
         return ContentService.createTextOutput(
           JSON.stringify({
             success: false,
-            error: "IP address has already selected a number",
+            error: "User has already selected a number",
           })
         ).setMimeType(ContentService.MimeType.JSON)
       }
 
-      // Append new row
-      sheet.appendRow([
-        data.number,
-        data.timestamp || new Date().toISOString(),
-        data.userAgent || "",
-        new Date().toISOString(),
-        data.ipAddress || "",
-      ])
+      // Append new row: userName, selectedNumber
+      sheet.appendRow([data.userName, data.selectedNumber])
 
       return ContentService.createTextOutput(
         JSON.stringify({
@@ -86,8 +119,8 @@ function doGet(e) {
   const data = sheet.getDataRange().getValues()
   const numbers = data
     .slice(1)
-    .map((row) => row[0])
-    .filter((n) => n)
+    .map((row) => Number(row[1]) || 0) // Column B: selectedNumber
+    .filter((n) => n && n >= 1 && n <= 100)
 
   return ContentService.createTextOutput(
     JSON.stringify({
@@ -133,12 +166,16 @@ function doGet(e) {
    - Create a `.env` file in the root directory:
 
    ```
+   VITE_GOOGLE_CLIENT_ID=your_google_oauth_client_id_here
    VITE_GOOGLE_SCRIPT_URL=your_web_app_url_here
    VITE_GOOGLE_SHEETS_ID=your_spreadsheet_id_here
    VITE_GOOGLE_API_KEY=your_api_key_here
    ```
 
-   **Note:** The API key is only needed for reading selected numbers. If you only use Google Apps Script for writing, you can skip the API key, but then the app won't be able to show which numbers are already taken.
+   **Note:**
+
+   - `VITE_GOOGLE_CLIENT_ID` is required for Google OAuth login
+   - The API key is only needed for reading selected numbers. If you only use Google Apps Script for writing, you can skip the API key, but then the app won't be able to show which numbers are already taken.
 
 ## Option 2: Direct API with API Key (Read-Only)
 
@@ -197,13 +234,19 @@ For reading selected numbers, you can use a Google Sheets API key:
 Create a `.env` file in the root directory:
 
 ```env
+# Google OAuth Configuration (Required)
+VITE_GOOGLE_CLIENT_ID=your_google_oauth_client_id_here
+
 # Google Sheets Configuration
 VITE_GOOGLE_SHEETS_ID=your_spreadsheet_id_here
 VITE_GOOGLE_API_KEY=your_api_key_here
 VITE_GOOGLE_SCRIPT_URL=your_google_apps_script_web_app_url_here
 ```
 
-**Note:** The app will work without Google Sheets configuration - selections will be saved locally only.
+**Note:**
+
+- `VITE_GOOGLE_CLIENT_ID` is required for the app to work - users must sign in with Google
+- The app will work without Google Sheets configuration - selections will be saved locally only, but users still need to sign in with Google
 
 ## Troubleshooting 403 Permission Denied Error
 

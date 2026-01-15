@@ -8,25 +8,13 @@ interface GoogleSheetsConfig {
   privateKey?: string
 }
 
-// Get user IP address
-export async function getUserIP(): Promise<string> {
-  try {
-    const response = await fetch("https://api.ipify.org?format=json")
-    const data = await response.json()
-    return data.ip || "unknown"
-  } catch (error) {
-    console.error("Error fetching IP address:", error)
-    return "unknown"
-  }
-}
-
-// Get selected numbers and IP addresses from Google Sheets
+// Get selected numbers and user names from Google Sheets
 export async function getSelectedNumbers(
   config: GoogleSheetsConfig
-): Promise<{ numbers: number[]; ipNumbers: Map<string, number> }> {
+): Promise<{ numbers: number[]; userNameNumbers: Map<string, number> }> {
   try {
-    // Using Google Sheets API v4 - get columns A (Number) and E (IP Address)
-    const url = `https://sheets.googleapis.com/v4/spreadsheets/${config.spreadsheetId}/values/Sheet1!A:E?key=${config.apiKey}`
+    // Using Google Sheets API v4 - get columns A (userName) and B (selectedNumber)
+    const url = `https://sheets.googleapis.com/v4/spreadsheets/${config.spreadsheetId}/values/Sheet1!A:B?key=${config.apiKey}`
 
     const response = await fetch(url)
     if (!response.ok) {
@@ -53,24 +41,27 @@ export async function getSelectedNumbers(
 
     // Skip header if exists
     const selectedNumbers: number[] = []
-    const ipNumbers = new Map<string, number>()
+    const userNameNumbers = new Map<string, number>()
 
-    rows.forEach((row: string[]) => {
-      const number = Number(row[0])
-      const ip = row[4] || "" // IP address is in column E (index 4)
+    rows.forEach((row: string[], index: number) => {
+      // Skip header row (first row)
+      if (index === 0) return
+
+      const userName = row[0] || "" // userName is in column A (index 0)
+      const number = Number(row[1]) // selectedNumber is in column B (index 1)
 
       if (!isNaN(number) && number >= 1 && number <= 100) {
         selectedNumbers.push(number)
-        if (ip) {
-          ipNumbers.set(ip, number)
+        if (userName) {
+          userNameNumbers.set(userName, number)
         }
       }
     })
 
-    return { numbers: selectedNumbers, ipNumbers }
+    return { numbers: selectedNumbers, userNameNumbers }
   } catch (error) {
     console.error("Error fetching selected numbers:", error)
-    return { numbers: [], ipNumbers: new Map() }
+    return { numbers: [], userNameNumbers: new Map() }
   }
 }
 
@@ -78,7 +69,7 @@ export async function getSelectedNumbers(
 // This is the recommended approach for client-side writes
 export async function saveNumberToSheet(
   number: number,
-  ipAddress: string,
+  userName: string,
   config: { scriptUrl: string }
 ): Promise<{ success: boolean; error?: string }> {
   try {
@@ -90,10 +81,8 @@ export async function saveNumberToSheet(
       },
       body: JSON.stringify({
         action: "append",
-        number,
-        timestamp: new Date().toISOString(),
-        userAgent: navigator.userAgent,
-        ipAddress: ipAddress,
+        userName: userName,
+        selectedNumber: number,
       }),
     })
 

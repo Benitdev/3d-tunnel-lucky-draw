@@ -1,11 +1,8 @@
-import React, { useRef, useLayoutEffect, useEffect, useState } from "react"
 import gsap from "gsap"
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react"
 import * as THREE from "three"
-import {
-  getSelectedNumbers,
-  saveNumberToSheet,
-  getUserIP,
-} from "../utils/googleSheets"
+import { useGoogleAuth } from "../utils/googleAuth"
+import { getSelectedNumbers, saveNumberToSheet } from "../utils/googleSheets"
 
 interface HeroProps {
   isDarkMode: boolean
@@ -46,7 +43,15 @@ const Hero: React.FC<HeroProps> = ({ isDarkMode }) => {
     "confirm" | "success" | "error"
   >("confirm")
   const dialogRef = useRef<HTMLDivElement>(null)
-  const [userIP, setUserIP] = useState<string | null>(null)
+  const {
+    user,
+    isAuthenticated,
+    isLoading: authLoading,
+    login,
+    logout,
+    userName,
+    authError,
+  } = useGoogleAuth()
   const [userSelectedNumber, setUserSelectedNumber] = useState<number | null>(
     null
   )
@@ -361,14 +366,6 @@ const Hero: React.FC<HeroProps> = ({ isDarkMode }) => {
     }
   }
 
-  useEffect(() => {
-    const fetchUserIP = async () => {
-      const ip = await getUserIP()
-      setUserIP(ip)
-    }
-    fetchUserIP()
-  }, [])
-
   // --- INITIAL SETUP ---
   useEffect(() => {
     if (!canvasRef.current || !containerRef.current) return
@@ -412,25 +409,26 @@ const Hero: React.FC<HeroProps> = ({ isDarkMode }) => {
       if (
         !GOOGLE_SHEETS_CONFIG.spreadsheetId ||
         !GOOGLE_SHEETS_CONFIG.apiKey ||
-        userHasSelected
+        userHasSelected ||
+        !isAuthenticated
       ) {
         return
       }
 
       try {
-        const { numbers, ipNumbers } = await getSelectedNumbers(
+        const { numbers, userNameNumbers } = await getSelectedNumbers(
           GOOGLE_SHEETS_CONFIG
         )
         setLoading(false)
 
         const newDisabledNumbers = new Set(numbers)
 
-        // Check if current IP has already selected a number
-        if (userIP && ipNumbers.has(userIP)) {
-          const ipSelectedNumber = ipNumbers.get(userIP)!
-          setUserSelectedNumber(ipSelectedNumber)
+        // Check if current user has already selected a number
+        if (userName && userNameNumbers.has(userName)) {
+          const userSelectedNum = userNameNumbers.get(userName)!
+          setUserSelectedNumber(userSelectedNum)
           setUserHasSelected(true)
-          setSelectedNumber(ipSelectedNumber)
+          setSelectedNumber(userSelectedNum)
 
           // Disable all numbers since user has already selected
           numberCellsRef.current.forEach((cell) => {
@@ -560,15 +558,15 @@ const Hero: React.FC<HeroProps> = ({ isDarkMode }) => {
       }
     }
 
-    if (userIP) {
+    if (isAuthenticated && userName) {
       updateDisabledNumbers()
     }
-    // Set up interval to check for new disabled numbers every 1 seconds
+    // Set up interval to check for new disabled numbers every 6 seconds
     const intervalId = setInterval(updateDisabledNumbers, 6000)
 
     // Mouse move handler for hover
     const onMouseMove = (event: MouseEvent) => {
-      if (showDialog || loading) return
+      if (showDialog || loading || !isAuthenticated) return
 
       mouseRef.current.x = (event.clientX / width) * 2 - 1
       mouseRef.current.y = -(event.clientY / height) * 2 + 1
@@ -642,7 +640,7 @@ const Hero: React.FC<HeroProps> = ({ isDarkMode }) => {
 
     // Mouse click handler
     const onMouseClick = (event: MouseEvent) => {
-      if (userHasSelected || showDialog || loading) return
+      if (userHasSelected || showDialog || loading || !isAuthenticated) return
 
       mouseRef.current.x = (event.clientX / width) * 2 - 1
       mouseRef.current.y = -(event.clientY / height) * 2 + 1
@@ -770,7 +768,7 @@ const Hero: React.FC<HeroProps> = ({ isDarkMode }) => {
       cancelAnimationFrame(frameId)
       renderer.dispose()
     }
-  }, [showDialog, userIP, loading]) // Run once on mount
+  }, [showDialog, isAuthenticated, userName, loading]) // Run when auth state changes
 
   // Handle number selection
   const handleNumberSelect = async (number: number) => {
@@ -905,38 +903,175 @@ const Hero: React.FC<HeroProps> = ({ isDarkMode }) => {
             ref={contentRef}
             className="text-center flex flex-col items-center max-w-3xl px-6"
           >
-            <h1
-              className={`relative text-[2rem] md:text-[2rem] lg:text-[3rem] leading-[0.9] font-black tracking-[-0.02em] mb-8 transition-all duration-700 ${
-                isDarkMode ? "text-white" : "text-gray-900"
-              }`}
-              style={{
-                background: isDarkMode
-                  ? "linear-gradient(135deg, #60a5fa 0%, #a78bfa 50%,rgb(86, 175, 111) 100%)"
-                  : "linear-gradient(135deg, #2563eb 0%,rgb(170, 138, 225) 50%,rgb(11, 229, 69) 100%)",
-                WebkitBackgroundClip: "text",
-                WebkitTextFillColor: "transparent",
-                backgroundClip: "text",
-                textShadow: isDarkMode
-                  ? "0 0 40px rgba(59, 130, 246, 0.6), 0 0 80px rgba(147, 51, 234, 0.4)"
-                  : "0 2px 10px rgba(0, 0, 0, 0.1)",
-                letterSpacing: "-0.03em",
-                filter: isDarkMode
-                  ? "drop-shadow(0 0 30px rgba(59, 130, 246, 0.5))"
-                  : "none",
-              }}
-            >
-              {userHasSelected && userSelectedNumber ? (
-                <>
-                  🎉 Your Lucky Number is{" "}
-                  {userSelectedNumber?.toString().padStart(3, "0")} 🎉
-                </>
-              ) : (
-                "Select Your Lucky Number"
-              )}
-            </h1>
+            {!isAuthenticated && !authLoading ? (
+              <div className="flex flex-col items-center gap-6">
+                <h1
+                  className={`relative text-[2rem] md:text-[2rem] lg:text-[3rem] leading-[0.9] font-black tracking-[-0.02em] mb-4 transition-all duration-700 ${
+                    isDarkMode ? "text-white" : "text-gray-900"
+                  }`}
+                  style={{
+                    background: isDarkMode
+                      ? "linear-gradient(135deg, #60a5fa 0%, #a78bfa 50%,rgb(86, 175, 111) 100%)"
+                      : "linear-gradient(135deg, #2563eb 0%,rgb(170, 138, 225) 50%,rgb(11, 229, 69) 100%)",
+                    WebkitBackgroundClip: "text",
+                    WebkitTextFillColor: "transparent",
+                    backgroundClip: "text",
+                    textShadow: isDarkMode
+                      ? "0 0 40px rgba(59, 130, 246, 0.6), 0 0 80px rgba(147, 51, 234, 0.4)"
+                      : "0 2px 10px rgba(0, 0, 0, 0.1)",
+                    letterSpacing: "-0.03em",
+                    filter: isDarkMode
+                      ? "drop-shadow(0 0 30px rgba(59, 130, 246, 0.5))"
+                      : "none",
+                  }}
+                >
+                  Select Your Lucky Number
+                </h1>
+                <p
+                  className={`text-lg mb-4 ${
+                    isDarkMode ? "text-gray-400" : "text-gray-600"
+                  }`}
+                >
+                  Please sign in with Google to continue
+                </p>
+                <button
+                  onClick={login}
+                  className={`px-8 py-4 rounded-lg font-semibold text-lg transition-all duration-300 hover:scale-105 pointer-events-auto bg-blue-200 ${
+                    isDarkMode
+                      ? "bg-white text-gray-900 hover:bg-gray-100"
+                      : "bg-gray-900 text-white hover:bg-gray-800"
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <svg
+                      className="w-6 h-6"
+                      viewBox="0 0 24 24"
+                      fill="currentColor"
+                    >
+                      <path
+                        d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                        fill="#4285F4"
+                      />
+                      <path
+                        d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                        fill="#34A853"
+                      />
+                      <path
+                        d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
+                        fill="#FBBC05"
+                      />
+                      <path
+                        d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+                        fill="#EA4335"
+                      />
+                    </svg>
+                    Sign in with Google
+                  </div>
+                </button>
+                {authError && (
+                  <div
+                    className={`mt-4 px-4 py-3 rounded-lg max-w-md text-center ${
+                      isDarkMode
+                        ? "bg-red-900/30 border border-red-500/50 text-red-300"
+                        : "bg-red-50 border border-red-200 text-red-700"
+                    }`}
+                  >
+                    <p className="text-sm font-medium">{authError}</p>
+                  </div>
+                )}
+              </div>
+            ) : authLoading ? (
+              <div className="flex flex-col items-center gap-4">
+                <div
+                  className={`w-12 h-12 border-4 border-t-transparent rounded-full animate-spin ${
+                    isDarkMode ? "border-blue-500" : "border-blue-600"
+                  }`}
+                />
+                <p
+                  className={`text-lg ${
+                    isDarkMode ? "text-gray-400" : "text-gray-600"
+                  }`}
+                >
+                  Loading...
+                </p>
+              </div>
+            ) : (
+              <>
+                <h1
+                  className={`relative text-[2rem] md:text-[2rem] lg:text-[3rem] leading-[0.9] font-black tracking-[-0.02em] mb-8 transition-all duration-700 ${
+                    isDarkMode ? "text-white" : "text-gray-900"
+                  }`}
+                  style={{
+                    background: isDarkMode
+                      ? "linear-gradient(135deg, #60a5fa 0%, #a78bfa 50%,rgb(86, 175, 111) 100%)"
+                      : "linear-gradient(135deg, #2563eb 0%,rgb(170, 138, 225) 50%,rgb(11, 229, 69) 100%)",
+                    WebkitBackgroundClip: "text",
+                    WebkitTextFillColor: "transparent",
+                    backgroundClip: "text",
+                    textShadow: isDarkMode
+                      ? "0 0 40px rgba(59, 130, 246, 0.6), 0 0 80px rgba(147, 51, 234, 0.4)"
+                      : "0 2px 10px rgba(0, 0, 0, 0.1)",
+                    letterSpacing: "-0.03em",
+                    filter: isDarkMode
+                      ? "drop-shadow(0 0 30px rgba(59, 130, 246, 0.5))"
+                      : "none",
+                  }}
+                >
+                  {userHasSelected && userSelectedNumber ? (
+                    <>
+                      🎉 Your Lucky Number is{" "}
+                      {userSelectedNumber?.toString().padStart(3, "0")} 🎉
+                    </>
+                  ) : (
+                    "Select Your Lucky Number"
+                  )}
+                </h1>
+              </>
+            )}
           </div>
         </div>
       </div>
+      {/* User Info and Logout Button - Bottom Right */}
+      {isAuthenticated && userName && (
+        <div className="fixed bottom-10 right-6 z-20 pointer-events-auto">
+          <div
+            className={`flex items-center gap-3 px-4 py-3 rounded-lg shadow-lg backdrop-blur-sm transition-all duration-300 ${
+              isDarkMode
+                ? "bg-gray-900/80 border border-gray-700"
+                : "bg-white/80 border border-gray-200"
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <div
+                className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold ${
+                  isDarkMode
+                    ? "bg-blue-500/20 text-blue-300"
+                    : "bg-blue-500/10 text-blue-600"
+                }`}
+              >
+                {userName.charAt(0).toUpperCase()}
+              </div>
+              <span
+                className={`text-sm font-medium ${
+                  isDarkMode ? "text-gray-200" : "text-gray-800"
+                }`}
+              >
+                {userName}
+              </span>
+            </div>
+            <button
+              onClick={logout}
+              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-300 hover:scale-105 ${
+                isDarkMode
+                  ? "bg-red-500/20 text-red-300 hover:bg-red-500/30"
+                  : "bg-red-500/10 text-red-600 hover:bg-red-500/20"
+              }`}
+            >
+              Logout
+            </button>
+          </div>
+        </div>
+      )}
       {/* Confirmation Dialog */}
       {showDialog && selectedNumber && (
         <div
@@ -1054,9 +1189,16 @@ const Hero: React.FC<HeroProps> = ({ isDarkMode }) => {
                               return
                             }
 
+                            if (!userName) {
+                              setIsSubmitting(false)
+                              setDialogStatus("error")
+                              setShowDialog(true)
+                              return
+                            }
+
                             const result = await saveNumberToSheet(
                               selectedNumber,
-                              userIP || "unknown",
+                              userName,
                               {
                                 scriptUrl: GOOGLE_SHEETS_CONFIG.scriptUrl,
                               }
