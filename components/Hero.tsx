@@ -1217,6 +1217,7 @@ const Hero: React.FC<HeroProps> = ({ isDarkMode }) => {
                         ? "bg-green-500 text-white hover:bg-green-600"
                         : "bg-green-600 text-white hover:bg-green-700"
                     }`}
+                    onClick={() => setShowDialog(false)}
                   >
                     Awesome!
                   </button>
