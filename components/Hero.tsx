@@ -562,7 +562,7 @@ const Hero: React.FC<HeroProps> = ({ isDarkMode }) => {
       updateDisabledNumbers()
     }
     // Set up interval to check for new disabled numbers every 6 seconds
-    const intervalId = setInterval(updateDisabledNumbers, 6000)
+    const intervalId = setInterval(updateDisabledNumbers, 10000)
 
     // Mouse move handler for hover
     const onMouseMove = (event: MouseEvent) => {
