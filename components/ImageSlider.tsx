@@ -76,7 +76,7 @@ const IMAGES_INFO: ImageInfo[] = [
   {
     image: "/images/20250917_084416 - Hau Ha Minh.jpg",
     actor: "Hà Minh Hậu",
-    description: "Team mate & Client",
+    description: "Teammate & Client",
   },
   {
     image: "/images/IMG_6444 - Hoai Tran Thi Thu.jpg",
