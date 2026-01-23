@@ -1,6 +1,5 @@
 import gsap from "gsap"
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import * as THREE from "three"
 
 interface ImageSliderProps {
   images?: string[]
@@ -22,12 +21,14 @@ const IMAGES_INFO: ImageInfo[] = [
   {
     image: "/images/IMG_8273 - Thao Bui Duy.jpg",
     actor: "Bùi Duy Thảo",
-    description: "Kozocom Badminton Club - Gắn kết vượt thời gian\nKozocom Badminton Club - 同僚との強い結び",
+    description:
+      "Kozocom Badminton Club - Gắn kết vượt thời gian\nKozocom Badminton Club - 同僚との強い結び",
   },
   {
     image: "/images/IMG_20251208_102343 - Mai Ho Thi Quynh.jpg",
     actor: "Hồ Thị Quỳnh Mai",
-    description: "Sự chăm chỉ hôm nay của những Entry chính là nền móng cho thành công ngày mai\nEntryメンバー一人ひとりの今日の努力こそが、将来の成功を築く基盤",
+    description:
+      "Sự chăm chỉ hôm nay của những Entry chính là nền móng cho thành công ngày mai\nEntryメンバー一人ひとりの今日の努力こそが、将来の成功を築く基盤",
   },
   {
     image: "/images/IMG_9848 - Nhan Nguyen Trong.jpg",
@@ -37,7 +38,8 @@ const IMAGES_INFO: ImageInfo[] = [
   {
     image: "/images/IMG_5096 - Thanh Bui Van.jpg",
     actor: "Bùi Văn Thành",
-    description: "Một ngày \"rất bình thường\" của Team TAS\nTASチームのごく平凡な一日",
+    description:
+      'Một ngày "rất bình thường" của Team TAS\nTASチームのごく平凡な一日',
   },
   {
     image: "/images/IMG_7077 - Giang Le Thi.jpg",
@@ -52,7 +54,8 @@ const IMAGES_INFO: ImageInfo[] = [
   {
     image: "/images/IMG_3145 - Nhan Phan Duc.jpg",
     actor: "Phan Đức Nhân",
-    description: "Lớn Rồi Vẫn Thích Quà Trung Thu\n大人になってもこどもの日のプレゼントが好き",
+    description:
+      "Lớn Rồi Vẫn Thích Quà Trung Thu\n大人になってもこどもの日のプレゼントが好き",
   },
   {
     image: "/images/IMG_20260116_115321 - Vi Pham Thi.jpg",
@@ -60,9 +63,10 @@ const IMAGES_INFO: ImageInfo[] = [
     description: "Hơn cả đồng nghiệp\n同僚以上の関係",
   },
   {
-    image: "/images/TẾT 2025 - Ly Tran Thi Khanh.jpg",
+    image: "/images/TẾT 2025 - Ly Tran Thi Khanh.jpg",
     actor: "Trần Thị Khánh Ly",
-    description: "Khi nam thần tạm nghỉ, niềm vui lên ngôi\nイケメンのイメージを忘れて、笑いが主役",
+    description:
+      "Khi nam thần tạm nghỉ, niềm vui lên ngôi\nイケメンのイメージを忘れて、笑いが主役",
   },
   {
     image: "/images/IMG_5937 - Thanh Tran Chi.jpg",
@@ -77,12 +81,14 @@ const IMAGES_INFO: ImageInfo[] = [
   {
     image: "/images/IMG_6444 - Hoai Tran Thi Thu.jpg",
     actor: "Trần Thị Thu Hoài",
-    description: "Kozocom - Nơi Câu Chuyện Bắt Đầu\nKozocom - 物語が始まった場所",
+    description:
+      "Kozocom - Nơi Câu Chuyện Bắt Đầu\nKozocom - 物語が始まった場所",
   },
   {
     image: "/images/IMG_1886 - Van Hoang Thi Cam.jpg",
     actor: "Hoàng Thị Cẩm Vân",
-    description: "Chung Nhịp Cười Dưới Ánh Đèn Đêm\nライトアップの下、笑顔が重なる瞬間",
+    description:
+      "Chung Nhịp Cười Dưới Ánh Đèn Đêm\nライトアップの下、笑顔が重なる瞬間",
   },
 ]
 
@@ -91,23 +97,20 @@ const ImageSlider: React.FC<ImageSliderProps> = ({
   isDarkMode = true,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null)
-  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const currentImageRef = useRef<HTMLImageElement>(null)
+  const nextImageRef = useRef<HTMLImageElement>(null)
   const textRef = useRef<HTMLDivElement>(null)
-
-  // Three.js refs
-  const sceneRef = useRef<THREE.Scene | null>(null)
-  const rendererRef = useRef<THREE.WebGLRenderer | null>(null)
-  const cameraRef = useRef<THREE.PerspectiveCamera | null>(null)
-  const currentImageMeshRef = useRef<THREE.Mesh | null>(null)
-  const nextImageMeshRef = useRef<THREE.Mesh | null>(null)
-  const imageTexturesRef = useRef<Map<string, THREE.Texture>>(new Map())
-  const ambientLightRef = useRef<THREE.AmbientLight | null>(null)
-  const directionalLightRef = useRef<THREE.DirectionalLight | null>(null)
   const isTransitioningRef = useRef(false)
-  const failedImagesRef = useRef<Set<number>>(new Set())
-  const fireworksSystemRef = useRef<THREE.Points | null>(null)
-  const fireworksParticlesRef = useRef<Float32Array | null>(null)
-  const startTimeRef = useRef<number>(Date.now())
+  const currentIndexRef = useRef(0)
+  const winnerTimerSetRef = useRef(false)
+  const intervalRef = useRef<NodeJS.Timeout | null>(null)
+  const shownInFirstCycleRef = useRef<Set<number>>(new Set())
+  const isFirstCycleCompleteRef = useRef(false)
+  const recapModeStartTimeRef = useRef<number | null>(null)
+  const recapModeTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const shownInRecapRef = useRef<Set<number>>(new Set())
+  const recapStartIndexRef = useRef<number | null>(null)
+  const isRecapCompleteRef = useRef(false)
 
   // State
   const [currentIndex, setCurrentIndex] = useState(0)
@@ -116,9 +119,10 @@ const ImageSlider: React.FC<ImageSliderProps> = ({
     IMAGES_INFO[0]
   )
   const [isStopped, setIsStopped] = useState(false)
-  const [showFireworks, setShowFireworks] = useState(false)
+  const [isWinnerRevealed, setIsWinnerRevealed] = useState(false)
+  const [isFastRecapMode, setIsFastRecapMode] = useState(false)
 
-  // Use provided images or default to IMAGES_INFO - memoized for stability
+  // Use provided images or default to IMAGES_INFO
   const imageList = useMemo(
     () =>
       images
@@ -127,272 +131,232 @@ const ImageSlider: React.FC<ImageSliderProps> = ({
     [images]
   )
 
-  // Image display duration (3 seconds)
-  const IMAGE_DURATION = 1500
-  // Transition duration
-  const TRANSITION_DURATION = 1.5
-  // Time to stop at winner image (20 seconds)
-  const STOP_AFTER_MS = 20000
+  // Image display duration (3 seconds for normal, faster for recap mode)
+  const NORMAL_IMAGE_DURATION = 3000
+  // Memory Recap Mode: 0.3-0.5s per image (randomized for dynamic feel)
+  const getFastRecapDuration = () => 100 + Math.random() * 200 // 300-500ms
+  // Transition duration (faster in recap mode)
+  const NORMAL_TRANSITION_DURATION = 1.5
+  const FAST_RECAP_TRANSITION_DURATION = 0.3 // Faster transitions in recap mode
+  const TRANSITION_DURATION = isFastRecapMode
+    ? FAST_RECAP_TRANSITION_DURATION
+    : NORMAL_TRANSITION_DURATION
+  // Memory Recap Mode total duration (~5 seconds)
+  const MEMORY_RECAP_DURATION = 5000
+  // Time to stop at winner image (25 seconds)
+  const STOP_AFTER_MS = 4000
   // Find index of winner image
   const WINNER_INDEX = useMemo(() => {
-    return imageList.findIndex((img) => img.actor === "Trần Thị Khánh Ly")
+    const index = imageList.findIndex(
+      (img) => img.actor === "Trần Thị Khánh Ly"
+    )
+    console.log(
+      `Winner index calculated: ${index}, Total images: ${imageList.length}`
+    )
+    if (index >= 0) {
+      console.log(`Winner image path: ${imageList[index].image}`)
+    }
+    return index
   }, [imageList])
 
-  // Load image texture
-  const loadImageTexture = (
-    imagePath: string
-  ): Promise<THREE.Texture> => {
-    return new Promise((resolve, reject) => {
-      // Check cache first
-      if (imageTexturesRef.current.has(imagePath)) {
-        const cachedTexture = imageTexturesRef.current.get(imagePath)!
-        // Verify texture is still valid
-        if (cachedTexture && cachedTexture.image) {
-          resolve(cachedTexture)
-          return
-        } else {
-          // Remove invalid cached texture
-          imageTexturesRef.current.delete(imagePath)
-        }
-      }
-
-      // Check for unsupported formats (HEIC files are not supported in browsers)
-      if (imagePath.toLowerCase().endsWith('.heic')) {
-        console.warn(
-          `HEIC format not supported in browsers: ${imagePath}. Please convert to JPEG or PNG.`
-        )
-        reject(new Error(`Unsupported image format: ${imagePath}`))
-        return
-      }
-
-      const loader = new THREE.TextureLoader()
-      const timeout = setTimeout(() => {
-        reject(new Error(`Timeout loading image: ${imagePath}`))
-      }, 15000) // 15 second timeout
-
-      loader.load(
-        imagePath,
-        (texture) => {
-          clearTimeout(timeout)
-          if (!texture || !texture.image) {
-            reject(new Error(`Invalid texture loaded: ${imagePath}`))
-            return
-          }
-          
-          // Use optimized texture settings for performance
-          texture.minFilter = THREE.LinearFilter // Simpler filter for better performance
-          texture.magFilter = THREE.LinearFilter
-          texture.format = THREE.RGBAFormat
-          texture.generateMipmaps = false // Disable mipmaps for better performance
-          texture.anisotropy = 1 // Minimal anisotropy for performance
-          texture.needsUpdate = true
-          
-          // Note: For better performance, consider pre-resizing images to max 2048x2048
-          // before uploading to reduce memory usage
-          
-          // Cache the texture
-          imageTexturesRef.current.set(imagePath, texture)
-          resolve(texture)
-        },
-        undefined,
-        (error) => {
-          clearTimeout(timeout)
-          console.error("Error loading image:", imagePath, error)
-          reject(new Error(`Failed to load image: ${imagePath}. ${error}`))
-        }
-      )
-    })
-  }
-
-  // Create image plane
-  const createImagePlane = async (
-    imagePath: string,
-    position: THREE.Vector3 = new THREE.Vector3(0, 0, 0)
-  ): Promise<THREE.Mesh> => {
-    const texture = await loadImageTexture(imagePath)
-
-    // Calculate aspect ratio to maintain image proportions
-    const aspectRatio = texture.image.width / texture.image.height
-    const planeWidth = 10 // Base width
-    const planeHeight = planeWidth / aspectRatio
-
-    const geometry = new THREE.PlaneGeometry(planeWidth, planeHeight)
-    // Use MeshBasicMaterial instead of MeshStandardMaterial for better performance
-    // (no lighting calculations needed)
-    const material = new THREE.MeshBasicMaterial({
-      map: texture,
-      transparent: true,
-      opacity: 0,
-      side: THREE.DoubleSide,
-    })
-
-    const mesh = new THREE.Mesh(geometry, material)
-    mesh.position.copy(position)
-    mesh.userData = { imagePath }
-
-    return mesh
-  }
-
-  // Transition between images - memoized with useCallback
+  // Transition to next image - CSS-based, smooth and performant
   const transitionToNext = useCallback(
-    async (nextIndex: number) => {
-      if (isTransitioningRef.current || !sceneRef.current || !cameraRef.current) {
+    async (nextIndex: number, isWinnerTransition = false) => {
+      // CRITICAL: Stop all transitions if winner is already revealed (unless this IS the winner transition)
+      if (isWinnerRevealed && !isWinnerTransition) {
+        console.log("Winner already revealed, blocking transition")
+        return
+      }
+      
+      // Validate index first
+      if (nextIndex < 0 || nextIndex >= imageList.length) {
+        console.warn(
+          `Invalid transition index: ${nextIndex}, imageList length: ${imageList.length}`
+        )
         return
       }
 
-      // Validate nextIndex
-      if (nextIndex < 0 || nextIndex >= imageList.length) {
-        console.error("Invalid nextIndex:", nextIndex)
+      // If this is a winner transition, ensure we're using the correct winner index
+      if (isWinnerTransition) {
+        if (WINNER_INDEX === -1) {
+          console.error("Winner index not found! Cannot transition to winner.")
+          return
+        }
+        if (nextIndex !== WINNER_INDEX) {
+          console.warn(
+            `Winner transition requested but nextIndex (${nextIndex}) doesn't match WINNER_INDEX (${WINNER_INDEX}). Correcting to WINNER_INDEX.`
+          )
+          // Correct the index to the actual winner index
+          nextIndex = WINNER_INDEX
+        }
+        const winnerImageInfo = imageList[nextIndex]
+        console.log(
+          `Winner transition confirmed: index ${nextIndex}, actor: ${winnerImageInfo.actor}, image: ${winnerImageInfo.image}`
+        )
+      }
+
+      if (isTransitioningRef.current) {
+        console.warn("Already transitioning, skipping this transition")
         return
       }
 
       isTransitioningRef.current = true
       setIsTransitioning(true)
+
       const nextImageInfo = imageList[nextIndex]
-      const currentMesh = currentImageMeshRef.current
+      // Only treat as winner transition when explicitly triggered by timer (isWinnerTransition = true)
+      // During normal cycling, treat winner image like any other image
+      const isWinner = isWinnerTransition && nextIndex === WINNER_INDEX
+      const currentImg = currentImageRef.current
+      const nextImg = nextImageRef.current
 
-      try {
-      // Create next image mesh (positioned slightly behind and scaled down)
-      const nextMesh = await createImagePlane(
-        nextImageInfo.image,
-        new THREE.Vector3(0, 0, -2)
-      )
-      nextMesh.scale.set(0.8, 0.8, 1)
-      nextMesh.rotation.y = 0.3
-      sceneRef.current.add(nextMesh)
-      nextImageMeshRef.current = nextMesh
-
-      // Animate camera movement (subtle rotation and position change)
-      const camera = cameraRef.current!
-      const cameraStartPos = camera.position.clone()
-      const cameraStartRot = camera.rotation.clone()
-
-      // Random subtle camera movement
-      const cameraOffsetX = (Math.random() - 0.5) * 0.5
-      const cameraOffsetY = (Math.random() - 0.5) * 0.3
-      const cameraRotY = (Math.random() - 0.5) * 0.1
-
-      // Exit animation for current image
-      if (currentMesh) {
-        const exitTimeline = gsap.timeline()
-        exitTimeline.to(currentMesh.scale, {
-          x: 0.8,
-          y: 0.8,
-          z: 1,
-          duration: TRANSITION_DURATION,
-          ease: "power2.inOut",
-        })
-        exitTimeline.to(
-          currentMesh.rotation,
-          {
-            y: -0.3,
-            duration: TRANSITION_DURATION,
-            ease: "power2.inOut",
-          },
-          0
-        )
-        exitTimeline.to(
-          currentMesh.position,
-          {
-            z: 2,
-            duration: TRANSITION_DURATION,
-            ease: "power2.inOut",
-          },
-          0
-        )
-        exitTimeline.to(
-          (currentMesh.material as THREE.MeshBasicMaterial),
-          {
-            opacity: 0,
-            duration: TRANSITION_DURATION * 0.8,
-            ease: "power2.inOut",
-          },
-          0
-        )
+      if (!currentImg || !nextImg) {
+        isTransitioningRef.current = false
+        setIsTransitioning(false)
+        return
       }
 
-      // Entrance animation for next image
-      const entranceTimeline = gsap.timeline()
-      entranceTimeline.to(nextMesh.scale, {
-        x: 1,
-        y: 1,
-        z: 1,
-        duration: TRANSITION_DURATION,
-        ease: "power2.inOut",
+      // Preload next image
+      const img = new Image()
+      img.src = nextImageInfo.image
+      await new Promise((resolve) => {
+        if (img.complete) {
+          resolve(null)
+        } else {
+          img.onload = () => resolve(null)
+          img.onerror = () => resolve(null) // Continue even if image fails
+        }
       })
-      entranceTimeline.to(
-        nextMesh.rotation,
-        {
-          y: 0,
-          duration: TRANSITION_DURATION,
-          ease: "power2.inOut",
-        },
-        0
-      )
-      entranceTimeline.to(
-        nextMesh.position,
-        {
-          z: 0,
-          x: 0,
-          y: 0,
-          duration: TRANSITION_DURATION,
-          ease: "power2.inOut",
-        },
-        0
-      )
-      entranceTimeline.to(
-        (nextMesh.material as THREE.MeshBasicMaterial),
-        {
-          opacity: 1,
-          duration: TRANSITION_DURATION * 0.8,
-          ease: "power2.inOut",
-        },
-        TRANSITION_DURATION * 0.2
-      )
 
-      // Camera animation - simplified to reduce lag
-      // Combine position and rotation into single timeline for better performance
-      const cameraTimeline = gsap.timeline()
-      cameraTimeline.to(
-        camera.position,
-        {
-          x: cameraStartPos.x + cameraOffsetX,
-          y: cameraStartPos.y + cameraOffsetY,
-          z: cameraStartPos.z,
-          duration: TRANSITION_DURATION,
-          ease: "power2.inOut",
-        },
-        0
-      )
-      cameraTimeline.to(
-        camera.rotation,
-        {
-          y: cameraStartRot.y + cameraRotY,
-          duration: TRANSITION_DURATION,
-          ease: "power2.inOut",
-        },
-        0
-      )
-      cameraTimeline.to(
-        camera.position,
-        {
+      // Set next image source
+      nextImg.src = nextImageInfo.image
+      nextImg.style.display = "block"
+
+      // Set up 3D perspective on images
+      currentImg.style.transformStyle = "preserve-3d"
+      nextImg.style.transformStyle = "preserve-3d"
+
+      // Random 3D rotation direction for variety
+      const rotationDirection = Math.random() > 0.5 ? 1 : -1
+
+      // More dynamic movement in Memory Recap Mode
+      let rotationY, rotationX, xMovement, zMovement
+      if (isFastRecapMode) {
+        // Memory Recap Mode: More dynamic horizontal/depth movement (like flipping memories)
+        rotationY = rotationDirection * (25 + Math.random() * 35) // 25-60 degrees
+        rotationX = (Math.random() - 0.5) * 15 // More vertical rotation
+        xMovement = rotationDirection * (50 + Math.random() * 100) // Horizontal flip movement
+        zMovement = -300 - Math.random() * 200 // More depth movement
+      } else {
+        // Normal mode: Subtle movement
+        rotationY = rotationDirection * (15 + Math.random() * 20)
+        rotationX = (Math.random() - 0.5) * 10
+        xMovement = 0
+        zMovement = -200
+      }
+
+      // Exit animation for current image - 3D flip out with enhanced shadow
+      gsap.to(currentImg, {
+        opacity: 0,
+        scale: isFastRecapMode ? 0.75 : 0.85,
+        y: isFastRecapMode ? -20 : -30,
+        x: isFastRecapMode ? -xMovement * 0.6 : 0,
+        rotationY: -rotationY * (isFastRecapMode ? 0.9 : 0.8),
+        rotationX: rotationX * (isFastRecapMode ? 0.9 : 0.8),
+        z: zMovement,
+        filter: isFastRecapMode
+          ? "blur(6px) brightness(0.6)"
+          : "blur(8px) brightness(0.7)",
+        boxShadow: "0 10px 20px -5px rgba(0, 0, 0, 0.3)",
+        duration: TRANSITION_DURATION,
+        ease: isFastRecapMode ? "power1.inOut" : "power2.in", // Faster easing in recap mode
+      })
+
+      // Entrance animation for next image
+      if (isWinner) {
+        // Special dramatic 3D entrance for winner - only when triggered by timer
+        nextImg.style.opacity = "0"
+        nextImg.style.transform =
+          "scale(0.8) translateY(40px) translateZ(-300px) rotateY(30deg) rotateX(-10deg)"
+        nextImg.style.filter = "blur(10px) brightness(0.5)"
+
+        gsap.to(nextImg, {
+          opacity: 1,
+          scale: 1.05,
+          y: 0,
+          z: 0,
+          rotationY: 0,
+          rotationX: 0,
+          filter: "blur(0px) brightness(1)",
+          boxShadow:
+            "0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.05), 0 0 60px rgba(255, 215, 0, 0.3)",
+          duration: NORMAL_TRANSITION_DURATION * 1.3, // Always use normal duration for winner
+          ease: "back.out(2)",
+          onComplete: () => {
+            console.log("Winner transition complete - stopping all slideshow activity")
+            
+            // Stop slideshow completely - set states first
+            setIsStopped(true)
+            setIsWinnerRevealed(true)
+            
+            // Immediately clear any running intervals/timeouts
+            if (intervalRef.current) {
+              if (isFastRecapMode) {
+                clearTimeout(intervalRef.current as unknown as NodeJS.Timeout)
+              } else {
+                clearInterval(intervalRef.current)
+              }
+              intervalRef.current = null
+            }
+
+            // Clear recap mode timer if it exists
+            if (recapModeTimerRef.current) {
+              clearTimeout(recapModeTimerRef.current)
+              recapModeTimerRef.current = null
+            }
+            
+            // Set transitioning ref to false to allow winner effects
+            isTransitioningRef.current = false
+            setIsTransitioning(false)
+
+            // Add winner effects
+            nextImg.classList.add("winner-image")
+
+            // Start fireworks animations after a short delay to ensure DOM is ready
+            setTimeout(() => {
+              startFireworksAnimations()
+            }, 200)
+          },
+        })
+      } else {
+        // Beautiful 3D entrance with perspective
+        // Memory Recap Mode: More dynamic entrance (like flipping memories)
+        const entranceX = isFastRecapMode ? xMovement : 0
+        const entranceZ = isFastRecapMode ? -zMovement * 0.8 : -250
+
+        nextImg.style.opacity = "0"
+        nextImg.style.transform = `scale(${
+          isFastRecapMode ? 0.8 : 0.85
+        }) translateY(30px) translateX(${entranceX}px) translateZ(${entranceZ}px) rotateY(${rotationY}deg) rotateX(${rotationX}deg)`
+        nextImg.style.filter = isFastRecapMode
+          ? "blur(6px) brightness(0.5)"
+          : "blur(8px) brightness(0.6)"
+
+        gsap.to(nextImg, {
+          opacity: 1,
+          scale: 1,
+          y: 0,
           x: 0,
-          y: 0,
-          z: 5,
-          duration: TRANSITION_DURATION * 0.5,
-          ease: "power2.inOut",
-        },
-        TRANSITION_DURATION
-      )
-      cameraTimeline.to(
-        camera.rotation,
-        {
-          y: 0,
-          duration: TRANSITION_DURATION * 0.5,
-          ease: "power2.inOut",
-        },
-        TRANSITION_DURATION
-      )
+          z: 0,
+          rotationY: 0,
+          rotationX: 0,
+          filter: "blur(0px) brightness(1)",
+          boxShadow:
+            "0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.05)",
+          duration: TRANSITION_DURATION,
+          ease: isFastRecapMode ? "power1.out" : "power3.out", // Faster easing in recap mode
+        })
+      }
 
       // Text animation
       if (textRef.current) {
@@ -400,11 +364,30 @@ const ImageSlider: React.FC<ImageSliderProps> = ({
           opacity: 0,
           y: -20,
           duration: TRANSITION_DURATION * 0.5,
-          ease: "power2.inOut",
+          ease: "power1.inOut",
           onComplete: () => {
             setCurrentImageInfo(nextImageInfo)
             setCurrentIndex(nextIndex)
-            // Use setTimeout to ensure state update happens before animation
+            currentIndexRef.current = nextIndex
+
+            // Track shown images in first cycle
+            if (!isFirstCycleCompleteRef.current) {
+              shownInFirstCycleRef.current.add(nextIndex)
+              // Check if first cycle is complete
+              if (shownInFirstCycleRef.current.size >= imageList.length) {
+                console.log(
+                  "First cycle complete! Switching to MEMORY RECAP MODE"
+                )
+                isFirstCycleCompleteRef.current = true
+                setIsFastRecapMode(true)
+                recapModeStartTimeRef.current = Date.now()
+                // Reset recap tracking
+                shownInRecapRef.current.clear()
+                recapStartIndexRef.current = null
+                isRecapCompleteRef.current = false
+              }
+            }
+
             setTimeout(() => {
               if (textRef.current) {
                 gsap.fromTo(
@@ -414,7 +397,7 @@ const ImageSlider: React.FC<ImageSliderProps> = ({
                     opacity: 1,
                     y: 0,
                     duration: TRANSITION_DURATION * 0.5,
-                    ease: "power2.inOut",
+                    ease: "power1.out",
                   }
                 )
               }
@@ -422,490 +405,698 @@ const ImageSlider: React.FC<ImageSliderProps> = ({
           },
         })
       } else {
-        // Update state even if textRef is not available
         setCurrentImageInfo(nextImageInfo)
         setCurrentIndex(nextIndex)
-      }
+        currentIndexRef.current = nextIndex
 
-      // Clean up old mesh after transition
-      entranceTimeline.eventCallback("onComplete", () => {
-        if (currentMesh && sceneRef.current) {
-          try {
-            sceneRef.current.remove(currentMesh)
-            // Dispose geometry and material
-            if (currentMesh.geometry) {
-              currentMesh.geometry.dispose()
-            }
-            const material = currentMesh.material as THREE.MeshBasicMaterial
-            if (material) {
-              // Don't dispose cached textures - they're reused
-              material.dispose()
-            }
-          } catch (cleanupError) {
-            console.error("Error cleaning up mesh:", cleanupError)
+        // Track shown images in first cycle
+        if (!isFirstCycleCompleteRef.current) {
+          shownInFirstCycleRef.current.add(nextIndex)
+          // Check if first cycle is complete
+          if (shownInFirstCycleRef.current.size >= imageList.length) {
+            console.log("First cycle complete! Switching to MEMORY RECAP MODE")
+            isFirstCycleCompleteRef.current = true
+            setIsFastRecapMode(true)
+            recapModeStartTimeRef.current = Date.now()
+            // Reset recap tracking
+            shownInRecapRef.current.clear()
+            recapStartIndexRef.current = null
+            isRecapCompleteRef.current = false
           }
         }
-        currentImageMeshRef.current = nextMesh
-        nextImageMeshRef.current = null
+      }
+
+      // Complete transition
+      setTimeout(() => {
+        // Hide current image and reset transforms
+        currentImg.style.display = "none"
+        currentImg.style.opacity = "1"
+        currentImg.style.transform =
+          "scale(1) translateY(0) translateZ(0) rotateY(0deg) rotateX(0deg)"
+        currentImg.style.filter = "blur(0px) brightness(1)"
+
+        // Reset next image transforms
+        nextImg.style.transform =
+          "scale(1) translateY(0) translateZ(0) rotateY(0deg) rotateX(0deg)"
+        nextImg.style.filter = "blur(0px) brightness(1)"
+
+        // Swap refs
+        const temp = currentImageRef.current
+        currentImageRef.current = nextImageRef.current
+        nextImageRef.current = temp
+
         isTransitioningRef.current = false
         setIsTransitioning(false)
-      })
-    } catch (error) {
-      console.error("Error transitioning to next image:", error, "Image index:", nextIndex)
-      
-      // Mark this image as failed
-      failedImagesRef.current.add(nextIndex)
-      
-      // Clean up any partially created mesh
-      if (nextImageMeshRef.current && sceneRef.current) {
-        try {
-          sceneRef.current.remove(nextImageMeshRef.current)
-          nextImageMeshRef.current.geometry.dispose()
-          const material = nextImageMeshRef.current.material as THREE.MeshBasicMaterial
-          if (material) {
-            material.dispose()
-          }
-        } catch (cleanupError) {
-          console.error("Error cleaning up failed mesh:", cleanupError)
-        }
-        nextImageMeshRef.current = null
-      }
-      
-      // Reset transitioning state
-      isTransitioningRef.current = false
-      setIsTransitioning(false)
-      
-      // The interval will automatically try the next valid image
-      // No need to manually trigger transition here
-      console.warn(`Image at index ${nextIndex} failed. Will skip and continue.`)
-    }
+      }, TRANSITION_DURATION * 1000)
     },
-    [isTransitioning, imageList]
+    [imageList, WINNER_INDEX, isWinnerRevealed, isStopped]
   )
 
-  // Initialize Three.js scene
-  useEffect(() => {
-    if (!canvasRef.current || !containerRef.current) return
+  // Helper to find next valid image index
+  const getNextValidIndex = useCallback(
+    (startIndex: number): number => {
+      if (imageList.length === 0) return 0
+      return (startIndex + 1) % imageList.length
+    },
+    [imageList.length]
+  )
 
-    // Scene setup
-    const scene = new THREE.Scene()
-    sceneRef.current = scene
+  // Helper to get next image for Memory Recap Mode (sequential, skipping winner)
+  const getNextRecapIndex = useCallback(
+    (startIndex: number): number | null => {
+      if (imageList.length === 0) return null
+      
+      // If recap hasn't started, start from index 0
+      if (recapStartIndexRef.current === null) {
+        recapStartIndexRef.current = 0
+        return 0
+      }
 
-    // Dark blue gradient background
-    scene.background = new THREE.Color(0x0a1628) // Dark blue
-    scene.fog = new THREE.FogExp2(0x050810, 0.015) // Near-black fog
+      // Find next index sequentially, skipping winner
+      let nextIndex = startIndex + 1
+      
+      // If we've gone through all images, return null to signal completion
+      if (nextIndex >= imageList.length) {
+        return null
+      }
 
-    // Camera setup
-    const width = window.innerWidth
-    const height = window.innerHeight
-    const camera = new THREE.PerspectiveCamera(50, width / height, 0.1, 1000)
-    camera.position.set(0, 0, 5)
-    cameraRef.current = camera
+      // Skip winner index during recap
+      if (nextIndex === WINNER_INDEX && WINNER_INDEX !== -1) {
+        nextIndex = nextIndex + 1
+        // If winner was the last image, we're done
+        if (nextIndex >= imageList.length) {
+          return null
+        }
+      }
 
-    // Renderer setup - optimized for performance
-    const renderer = new THREE.WebGLRenderer({
-      canvas: canvasRef.current,
-      antialias: false, // Disable antialiasing for better performance
-      alpha: false,
-      powerPreference: "high-performance",
-      stencil: false, // Disable stencil buffer if not needed
-      depth: true,
-    })
-    renderer.setSize(width, height)
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5)) // Lower pixel ratio for better performance
-    renderer.shadowMap.enabled = false // Disable shadows for better performance
-    renderer.outputColorSpace = THREE.SRGBColorSpace
-    renderer.toneMapping = THREE.NoToneMapping // Disable tone mapping for performance
-    rendererRef.current = renderer
+      return nextIndex
+    },
+    [imageList.length, WINNER_INDEX]
+  )
 
-    // Lighting setup - soft ambient + directional
-    const ambientLight = new THREE.AmbientLight(0x4a6fa5, 0.4) // Soft blue ambient
-    scene.add(ambientLight)
-    ambientLightRef.current = ambientLight
+  // Start elegant sparkle animations when winner is revealed
+  const startFireworksAnimations = useCallback(() => {
+    // Wait a bit for DOM to be ready
+    setTimeout(() => {
+      // Animate elegant sparkles - gentle and premium
+      const animateSparkle = (
+        element: HTMLElement,
+        direction: "left" | "right"
+      ) => {
+        const yOffset = (Math.random() - 0.5) * 80
+        const delay = Math.random() * 2
+        const duration = 3 + Math.random() * 2
+        const xDistance =
+          direction === "left"
+            ? -60 - Math.random() * 40
+            : 60 + Math.random() * 40
 
-    const directionalLight = new THREE.DirectionalLight(0x6b9bd4, 0.8) // Blue-white directional
-    directionalLight.position.set(5, 5, 5)
-    directionalLight.castShadow = false // Disable shadows for performance
-    scene.add(directionalLight)
-    directionalLightRef.current = directionalLight
-
-    // Add subtle fill light from opposite side
-    const fillLight = new THREE.DirectionalLight(0x3a5a8a, 0.3)
-    fillLight.position.set(-5, -3, -5)
-    fillLight.castShadow = false
-    scene.add(fillLight)
-
-    // Load and display first image
-    const initializeFirstImage = async () => {
-      try {
-        const firstMesh = await createImagePlane(imageList[0].image)
-        scene.add(firstMesh)
-        currentImageMeshRef.current = firstMesh
-
-        // Entrance animation for first image
-        firstMesh.scale.set(0, 0, 1)
-        firstMesh.rotation.y = 0.5
-        ;(firstMesh.material as THREE.MeshBasicMaterial).opacity = 0
-
-        gsap.to(firstMesh.scale, {
-          x: 1,
-          y: 1,
-          z: 1,
-          duration: 1.5,
-          ease: "power2.out",
-        })
-        gsap.to(firstMesh.rotation, {
+        // Reset position first
+        gsap.set(element, {
+          opacity: 0,
+          x: 0,
           y: 0,
-          duration: 1.5,
-          ease: "power2.out",
+          scale: 0,
         })
-        gsap.to(firstMesh.material as THREE.MeshBasicMaterial, {
+
+        // Brilliant, spectacular animation - make particles truly brilliant
+        gsap.to(element, {
           opacity: 1,
-          duration: 1.5,
+          x: xDistance * (1.2 + Math.random() * 0.3),
+          y: yOffset + (Math.random() - 0.5) * 40,
+          scale: 1.8 + Math.random() * 0.7,
+          rotation: (Math.random() - 0.5) * 360,
+          duration: duration * 0.5,
           ease: "power2.out",
+          delay: delay,
+          onComplete: () => {
+            gsap.to(element, {
+              opacity: 0,
+              x: direction === "left" ? -150 : 150,
+              y: yOffset + (Math.random() - 0.5) * 60,
+              scale: 0.1,
+              rotation: (Math.random() - 0.5) * 720,
+              duration: duration * 0.5,
+              ease: "power2.in",
+              onComplete: () => {
+                // Restart animation if winner still revealed
+                setTimeout(() => {
+                  if (isWinnerRevealed) {
+                    animateSparkle(element, direction)
+                  }
+                }, Math.random() * 1500 + 1000)
+              },
+            })
+          },
         })
+      }
 
-        // Text entrance
-        if (textRef.current) {
-          gsap.fromTo(
-            textRef.current,
-            { opacity: 0, y: 30 },
-            {
-              opacity: 1,
-              y: 0,
-              duration: 1.5,
-              ease: "power2.out",
-              delay: 0.5,
-            }
-          )
+      // Start animations for all sparkles
+      const leftSparkles = document.querySelectorAll('[data-firework="left"]')
+      console.log(`Found ${leftSparkles.length} left sparkles`)
+      leftSparkles.forEach((sparkle) => {
+        animateSparkle(sparkle as HTMLElement, "left")
+      })
+
+      const rightSparkles = document.querySelectorAll('[data-firework="right"]')
+      console.log(`Found ${rightSparkles.length} right sparkles`)
+      rightSparkles.forEach((sparkle) => {
+        animateSparkle(sparkle as HTMLElement, "right")
+      })
+    }, 100)
+  }, [isWinnerRevealed])
+
+  // Auto-advance slideshow - continue cycling through all images until timer triggers
+  useEffect(() => {
+    if (imageList.length === 0 || isStopped || isWinnerRevealed) {
+      // Clear interval/timeout if winner is revealed or stopped
+      if (intervalRef.current) {
+        if (isFastRecapMode) {
+          clearTimeout(intervalRef.current as unknown as NodeJS.Timeout)
+        } else {
+          clearInterval(intervalRef.current)
         }
-      } catch (error) {
-        console.error("Error loading first image:", error)
+        intervalRef.current = null
+      }
+      console.log("Slideshow stopped - isStopped:", isStopped, "isWinnerRevealed:", isWinnerRevealed)
+      return
+    }
+
+    // Clear existing interval/timeout before creating new one (important when IMAGE_DURATION changes)
+    if (intervalRef.current) {
+      if (isFastRecapMode) {
+        clearTimeout(intervalRef.current as unknown as NodeJS.Timeout)
+      } else {
+        clearInterval(intervalRef.current)
+      }
+      intervalRef.current = null
+    }
+
+    // Use dynamic duration based on mode
+    const getCurrentDuration = () => {
+      if (isFastRecapMode) {
+        return getFastRecapDuration() // 0.3-0.5s randomized
+      }
+      return NORMAL_IMAGE_DURATION
+    }
+
+    const scheduleNext = () => {
+      // CRITICAL: Stop scheduling if winner is revealed
+      if (isWinnerRevealed || isStopped) {
+        console.log("Winner revealed or stopped, canceling scheduleNext")
+        return
+      }
+      
+      if (
+        !isTransitioningRef.current &&
+        !isTransitioning &&
+        !isStopped &&
+        !isWinnerRevealed
+      ) {
+        let nextIndex: number | null
+        
+        if (isFastRecapMode) {
+          // Memory Recap Mode: Sequential through all images, skipping winner
+          nextIndex = getNextRecapIndex(currentIndexRef.current)
+          
+          if (nextIndex === null) {
+            // Recap complete! All images shown (except winner)
+            console.log("Memory Recap Mode complete! All images shown. Transitioning to winner...")
+            isRecapCompleteRef.current = true
+            
+            // Stop recap cycling
+            if (intervalRef.current) {
+              clearTimeout(intervalRef.current as unknown as NodeJS.Timeout)
+              intervalRef.current = null
+            }
+            
+            // Transition to winner after a brief pause
+            setTimeout(() => {
+              if (WINNER_INDEX !== -1 && !isTransitioningRef.current) {
+                transitionToNext(WINNER_INDEX, true)
+              }
+            }, 300)
+            return
+          }
+          
+          // Track shown images in recap
+          shownInRecapRef.current.add(nextIndex)
+        } else {
+          // Normal mode: Continue cycling through all images
+          nextIndex = getNextValidIndex(currentIndexRef.current)
+        }
+        
+        if (nextIndex !== null && nextIndex !== currentIndexRef.current) {
+          transitionToNext(nextIndex, false) // Always pass false - winner transition handled separately
+        }
       }
     }
 
-    initializeFirstImage()
-
-    // Animation loop - optimized with frame skipping for better performance
-    let frameId: number
-    let lastFrameTime = performance.now()
-    const targetFPS = 60
-    const frameInterval = 1000 / targetFPS
-    
-    const animate = (currentTime: number) => {
-      frameId = requestAnimationFrame(animate)
-      
-      const deltaTime = currentTime - lastFrameTime
-      
-      // Only render if enough time has passed (throttle to target FPS)
-      if (deltaTime >= frameInterval) {
-        // Create fireworks if needed
-        if (showFireworks && !fireworksSystemRef.current && scene) {
-          const particleCount = 500
-          const geometry = new THREE.BufferGeometry()
-          const positions = new Float32Array(particleCount * 3)
-          const velocities = new Float32Array(particleCount * 3)
-          const colors = new Float32Array(particleCount * 3)
-          const sizes = new Float32Array(particleCount)
-          
-          // Initialize particles
-          for (let i = 0; i < particleCount; i++) {
-            const i3 = i * 3
-            
-            // Random position around center
-            positions[i3] = (Math.random() - 0.5) * 0.1
-            positions[i3 + 1] = (Math.random() - 0.5) * 0.1
-            positions[i3 + 2] = (Math.random() - 0.5) * 0.1
-            
-            // Random velocity
-            const speed = 0.02 + Math.random() * 0.03
-            const angle1 = Math.random() * Math.PI * 2
-            const angle2 = Math.random() * Math.PI
-            velocities[i3] = Math.sin(angle2) * Math.cos(angle1) * speed
-            velocities[i3 + 1] = Math.cos(angle2) * speed
-            velocities[i3 + 2] = Math.sin(angle2) * Math.sin(angle1) * speed
-            
-            // Random colors (red, blue, yellow, green, purple)
-            const colorOptions = [
-              [1, 0.2, 0.2], // Red
-              [0.2, 0.4, 1], // Blue
-              [1, 0.8, 0.2], // Yellow
-              [0.2, 1, 0.4], // Green
-              [0.8, 0.2, 1], // Purple
-            ]
-            const color = colorOptions[Math.floor(Math.random() * colorOptions.length)]
-            colors[i3] = color[0]
-            colors[i3 + 1] = color[1]
-            colors[i3 + 2] = color[2]
-            
-            sizes[i] = Math.random() * 0.05 + 0.02
-          }
-          
-          geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3))
-          geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3))
-          geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1))
-          
-          const material = new THREE.PointsMaterial({
-            size: 0.1,
-            vertexColors: true,
-            transparent: true,
-            opacity: 1,
-            blending: THREE.AdditiveBlending,
-          })
-          
-          const particles = new THREE.Points(geometry, material)
-          particles.userData = { velocities, startTime: Date.now() }
-          scene.add(particles)
-          fireworksSystemRef.current = particles
-          fireworksParticlesRef.current = positions
-        }
-        
-        // Update fireworks if active
-        if (fireworksSystemRef.current && showFireworks) {
-          const particles = fireworksSystemRef.current
-          const positions = particles.geometry.attributes.position.array as Float32Array
-          const velocities = particles.userData.velocities as Float32Array
-          const elapsed = (Date.now() - particles.userData.startTime) / 1000
-          const fadeStart = 2
-          const fadeEnd = 4
-          
-          for (let i = 0; i < positions.length; i += 3) {
-            // Update position
-            positions[i] += velocities[i] * deltaTime * 0.1
-            positions[i + 1] += velocities[i + 1] * deltaTime * 0.1
-            positions[i + 2] += velocities[i + 2] * deltaTime * 0.1
-            
-            // Apply gravity
-            velocities[i + 1] -= 0.0001 * deltaTime
-          }
-          
-          // Fade out over time
-          if (elapsed > fadeStart) {
-            const fade = Math.max(0, 1 - (elapsed - fadeStart) / (fadeEnd - fadeStart))
-            if (particles.material instanceof THREE.PointsMaterial) {
-              particles.material.opacity = fade
-            }
-          }
-          
-          particles.geometry.attributes.position.needsUpdate = true
-          
-          // Reset after fade out
-          if (elapsed > fadeEnd) {
-            particles.userData.startTime = Date.now()
-            // Reset positions
-            for (let i = 0; i < positions.length; i += 3) {
-              positions[i] = (Math.random() - 0.5) * 0.1
-              positions[i + 1] = (Math.random() - 0.5) * 0.1
-              positions[i + 2] = (Math.random() - 0.5) * 0.1
-            }
-            if (particles.material instanceof THREE.PointsMaterial) {
-              particles.material.opacity = 1
-            }
-          }
-        }
-        
-        if (renderer && scene && camera) {
-          renderer.render(scene, camera)
-        }
-        lastFrameTime = currentTime - (deltaTime % frameInterval)
+    // In fast recap mode, use dynamic duration for each transition
+    if (isFastRecapMode) {
+      const scheduleRecapTransition = () => {
+        scheduleNext()
+        const duration = getCurrentDuration()
+        intervalRef.current = setTimeout(() => {
+          scheduleRecapTransition()
+        }, duration) as unknown as NodeJS.Timeout
       }
+      scheduleRecapTransition()
+    } else {
+      // Normal mode: fixed interval
+      intervalRef.current = setInterval(() => {
+        scheduleNext()
+      }, NORMAL_IMAGE_DURATION)
     }
-    animate(performance.now())
 
-    // Handle resize
-    const handleResize = () => {
-      const w = window.innerWidth
-      const h = window.innerHeight
-      camera.aspect = w / h
-      camera.updateProjectionMatrix()
-      renderer.setSize(w, h)
-    }
-    window.addEventListener("resize", handleResize)
-
-    // Cleanup
     return () => {
-      window.removeEventListener("resize", handleResize)
-      cancelAnimationFrame(frameId)
-
-      // Dispose textures
-      imageTexturesRef.current.forEach((texture) => {
-        texture.dispose()
-      })
-      imageTexturesRef.current.clear()
-
-      // Dispose geometries and materials
-      scene.traverse((object) => {
-        if (object instanceof THREE.Mesh) {
-          object.geometry.dispose()
-          const material = object.material as THREE.MeshBasicMaterial
-          if (material.map && !imageTexturesRef.current.has(material.map.uuid)) {
-            material.map.dispose()
-          }
-          material.dispose()
+      if (intervalRef.current) {
+        if (isFastRecapMode) {
+          clearTimeout(intervalRef.current as unknown as NodeJS.Timeout)
+        } else {
+          clearInterval(intervalRef.current)
         }
-      })
+        intervalRef.current = null
+      }
+    }
+  }, [
+    isTransitioning,
+    isStopped,
+    isWinnerRevealed,
+    imageList.length,
+    transitionToNext,
+    getNextValidIndex,
+    isFastRecapMode, // Re-create interval when fast recap mode changes
+  ])
 
-      renderer.dispose()
+  // Memory Recap Mode: Transition to winner is now handled by completion tracking
+  // (No time-based timer - waits for all images to be shown)
+
+  // Legacy timer to stop at winner image after STOP_AFTER_MS (kept for backward compatibility)
+  useEffect(() => {
+    if (
+      isStopped ||
+      WINNER_INDEX === -1 ||
+      winnerTimerSetRef.current ||
+      isFastRecapMode
+    )
+      return
+
+    winnerTimerSetRef.current = true
+    console.log(
+      `Starting ${STOP_AFTER_MS}ms timer. Winner index: ${WINNER_INDEX}`
+    )
+
+    const timer = setTimeout(() => {
+      const currentIdx = currentIndexRef.current
+
+      console.log(
+        `${STOP_AFTER_MS}ms elapsed. Current index: ${currentIdx}, Winner index: ${WINNER_INDEX}`
+      )
+
+      // Wait for any current transition to complete, then transition to winner
+      const transitionToWinner = () => {
+        if (!isTransitioningRef.current) {
+          // Validate winner index before transitioning
+          if (WINNER_INDEX === -1) {
+            console.error("Cannot transition to winner: WINNER_INDEX is -1 (not found)")
+            return
+          }
+          
+          if (WINNER_INDEX >= imageList.length) {
+            console.error(
+              `Invalid WINNER_INDEX: ${WINNER_INDEX}, imageList length: ${imageList.length}`
+            )
+            return
+          }
+          
+          const winnerImageInfo = imageList[WINNER_INDEX]
+          console.log(
+            `Transitioning to winner at index ${WINNER_INDEX}, actor: ${winnerImageInfo.actor}, image: ${winnerImageInfo.image}`
+          )
+          
+          transitionToNext(WINNER_INDEX, true) // Pass true to trigger winner effects
+
+          // Stop slideshow after winner transition completes
+          setTimeout(() => {
+            setIsStopped(true)
+            setIsWinnerRevealed(true)
+            // Clear any running intervals
+            if (intervalRef.current) {
+              clearInterval(intervalRef.current)
+              intervalRef.current = null
+            }
+            console.log("Slideshow stopped, winner revealed")
+          }, TRANSITION_DURATION * 1000 * 1.3 + 500)
+        } else {
+          // If currently transitioning, wait a bit and try again
+          setTimeout(transitionToWinner, 100)
+        }
+      }
+
+      if (currentIdx !== WINNER_INDEX) {
+        // Transition to winner if not already showing it
+        transitionToWinner()
+      } else {
+        // Already showing winner, just stop and reveal
+        setIsStopped(true)
+        setIsWinnerRevealed(true)
+        // Clear any running intervals
+        if (intervalRef.current) {
+          clearInterval(intervalRef.current)
+          intervalRef.current = null
+        }
+        // Trigger winner effects
+        if (currentImageRef.current) {
+          currentImageRef.current.classList.add("winner-image")
+          startFireworksAnimations()
+        }
+        console.log("Already showing winner, stopping slideshow")
+      }
+    }, STOP_AFTER_MS)
+
+    return () => {
+      console.log("Clearing winner timer")
+      clearTimeout(timer)
+    }
+  }, [WINNER_INDEX, transitionToNext, startFireworksAnimations])
+
+  // Initialize first image and animate title entrance
+  useEffect(() => {
+    if (currentImageRef.current && imageList.length > 0) {
+      // Mark first image as shown in first cycle
+      shownInFirstCycleRef.current.add(0)
+
+      currentImageRef.current.src = imageList[0].image
+      currentImageRef.current.style.opacity = "0"
+      currentImageRef.current.style.transform =
+        "scale(0.9) translateZ(-200px) rotateY(15deg)"
+      currentImageRef.current.style.filter = "blur(5px) brightness(0.7)"
+      currentImageRef.current.style.transformStyle = "preserve-3d"
+
+      gsap.to(currentImageRef.current, {
+        opacity: 1,
+        scale: 1,
+        z: 0,
+        rotationY: 0,
+        filter: "blur(0px) brightness(1)",
+        duration: 1.5,
+        ease: "power3.out",
+      })
+    }
+
+    // Animate title entrance
+    const titleElement = document.querySelector(".title-animated")
+    if (titleElement) {
+      // Ensure it's visible first
+      ;(titleElement as HTMLElement).style.opacity = "1"
+      ;(titleElement as HTMLElement).style.visibility = "visible"
+
+      gsap.fromTo(
+        titleElement,
+        {
+          opacity: 0,
+          y: -30,
+          scale: 0.9,
+        },
+        {
+          opacity: 1,
+          y: 0,
+          scale: 1,
+          duration: 1.2,
+          ease: "back.out(1.7)",
+          delay: 0.3,
+        }
+      )
     }
   }, [])
 
-  // Helper to find next valid image index (skip failed ones)
-  const getNextValidIndex = useCallback((startIndex: number): number => {
-    let attempts = 0
-    let nextIndex = (startIndex + 1) % imageList.length
-    
-    // Try to find a valid image (not in failed set)
-    while (failedImagesRef.current.has(nextIndex) && attempts < imageList.length) {
-      nextIndex = (nextIndex + 1) % imageList.length
-      attempts++
+  // Start fireworks when winner is revealed
+  useEffect(() => {
+    if (isWinnerRevealed) {
+      // Start animations after DOM is ready
+      const timer1 = setTimeout(() => {
+        startFireworksAnimations()
+      }, 300)
+
+      // Also start after transition completes
+      const timer2 = setTimeout(() => {
+        startFireworksAnimations()
+      }, TRANSITION_DURATION * 1000 * 1.2 + 800)
+
+      return () => {
+        clearTimeout(timer1)
+        clearTimeout(timer2)
+      }
     }
-    
-    return nextIndex
-  }, [imageList.length])
-
-  // Timer to stop at winner image after 20 seconds
-  useEffect(() => {
-    if (isStopped || WINNER_INDEX === -1) return
-
-    const timer = setTimeout(() => {
-      // Transition to winner image
-      if (currentIndex !== WINNER_INDEX && !isTransitioning) {
-        transitionToNext(WINNER_INDEX)
-      }
-      
-      // Stop slideshow and show fireworks
-      setTimeout(() => {
-        setIsStopped(true)
-        setShowFireworks(true)
-        // Fireworks will be created in the animation loop when showFireworks is true
-      }, TRANSITION_DURATION * 1000 + 500)
-    }, STOP_AFTER_MS)
-
-    return () => clearTimeout(timer)
-  }, [currentIndex, isTransitioning, isStopped, WINNER_INDEX, transitionToNext])
-
-  // Auto-advance slideshow - separate effect for interval management
-  useEffect(() => {
-    if (imageList.length === 0 || isStopped) return
-
-    const intervalId = setInterval(() => {
-      // Check both state and ref to avoid race conditions
-      if (!isTransitioningRef.current && !isTransitioning && !isStopped) {
-        const nextIndex = getNextValidIndex(currentIndex)
-        transitionToNext(nextIndex)
-      }
-    }, IMAGE_DURATION)
-
-    return () => clearInterval(intervalId)
-  }, [currentIndex, isTransitioning, isStopped, imageList.length, transitionToNext, getNextValidIndex])
+  }, [isWinnerRevealed, startFireworksAnimations])
 
   return (
     <div
       ref={containerRef}
       className="relative w-full h-screen overflow-hidden"
-      style={{
-        background:
-          "linear-gradient(135deg, #0a1628 0%, #050810 50%, #020408 100%)",
-      }}
     >
-      <canvas
-        ref={canvasRef}
-        className="absolute inset-0 w-full h-full"
+      {/* Background image overlay - darkened for focus, full screen */}
+      <div
+        className="absolute inset-0 w-full h-full z-0"
         style={{
-          willChange: "transform",
-          transform: "translateZ(0)", // Force GPU acceleration
+          backgroundImage: "url('/images/background.png')",
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+          backgroundRepeat: "no-repeat",
+          backgroundColor: "#0a1628",
+          opacity: 0.5,
+          filter: "brightness(0.7)",
+          minWidth: "100%",
+          minHeight: "100%",
         }}
       />
 
-      {/* Text overlay */}
+      {/* Header */}
+      <div className="absolute top-0 left-0 right-0 z-40 p-4 pointer-events-none">
+        <div className="max-w-7xl mx-auto flex items-center justify-between">
+          {/* Logo - Top Left */}
+          <div className="flex-shrink-0">
+            <img
+              src="/kozocom-logo.png"
+              alt="Kozocom Logo"
+              className="h-10 md:h-12 lg:h-14 w-auto opacity-90 hover:opacity-100 transition-opacity duration-300"
+              style={{
+                filter:
+                  "drop-shadow(0 2px 8px rgba(0, 0, 0, 0.5)) drop-shadow(0 0 20px rgba(255, 255, 255, 0.1))",
+              }}
+            />
+          </div>
+
+          {/* Center Title - Beautiful animated */}
+          <div className="flex-1 flex justify-center px-4">
+            <h1
+              className="text-xl md:text-2xl lg:text-3xl xl:text-4xl font-bold text-center title-animated"
+              style={{
+                color: "#ffffff",
+                background:
+                  "linear-gradient(135deg, #ffffff 0%, #e0e7ff 20%, #c7d2fe 40%, #a5b4fc 60%, #818cf8 80%, #6366f1 100%)",
+                backgroundSize: "200% 200%",
+                WebkitBackgroundClip: "text",
+                WebkitTextFillColor: "transparent",
+                backgroundClip: "text",
+                textShadow:
+                  "0 0 40px rgba(167, 139, 250, 0.5), 0 4px 20px rgba(0, 0, 0, 0.8), 0 0 60px rgba(99, 102, 241, 0.3)",
+                filter: "drop-shadow(0 2px 10px rgba(0, 0, 0, 0.5))",
+                letterSpacing: "0.05em",
+                fontFamily: "'Playfair Display', 'Georgia', serif",
+                animation:
+                  "titleShimmer 3s ease-in-out infinite, titleGlow 2s ease-in-out infinite",
+                position: "relative",
+                opacity: 1,
+                visibility: "visible",
+                display: "block",
+                zIndex: 1,
+              }}
+            >
+              MOMENT OF THE YEAR 2025
+            </h1>
+          </div>
+
+          {/* Year End Party - Top Right */}
+          <div className="flex-shrink-0 text-right">
+            <p
+              className="text-sm md:text-base lg:text-lg font-medium"
+              style={{
+                background:
+                  "linear-gradient(135deg, #ffffff 0%, #e0e7ff 50%, #c7d2fe 100%)",
+                WebkitBackgroundClip: "text",
+                WebkitTextFillColor: "transparent",
+                backgroundClip: "text",
+                textShadow:
+                  "0 2px 10px rgba(130, 147, 234, 0.6), 0 0 30px rgba(102, 155, 225, 0.4)",
+                letterSpacing: "0.1em",
+                textTransform: "uppercase",
+                filter: "drop-shadow(0 2px 8px rgba(0, 0, 0, 0.6))",
+              }}
+            >
+              year end party
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Image container - centered gallery style with 3D perspective */}
       <div
-        ref={textRef}
-        className="absolute bottom-0 left-0 right-0 z-10 px-6 md:px-12 pb-8 md:pb-12 text-center pointer-events-none"
+        className="absolute inset-0 z-10 flex items-center justify-center"
         style={{
-          background:
-            "linear-gradient(to top, rgba(5, 8, 16, 0.95) 0%, rgba(5, 8, 16, 0.7) 40%, rgba(5, 8, 16, 0.3) 70%, transparent 100%)",
+          perspective: "1200px",
+          perspectiveOrigin: "50% 50%",
         }}
       >
-        <div className="max-w-5xl mx-auto space-y-6">
-          {/* Description - ở trên với style khác nhau cho tiếng Việt và tiếng Nhật */}
-          {currentImageInfo.description && (() => {
-            const descriptionParts = currentImageInfo.description.split('\n')
-            const vietnameseText = descriptionParts[0] || ''
-            const japaneseText = descriptionParts[1] || ''
-            
-            return (
-              <div className="mb-6 space-y-4">
-                {/* Tiếng Việt - Style lớn hơn, bold hơn, có gradient */}
-                {vietnameseText && (
-                  <div className="mb-3">
+        {/* Current image */}
+        <img
+          ref={currentImageRef}
+          alt={currentImageInfo.actor}
+          className="absolute max-w-[90vw] max-h-[75vh] w-auto h-auto object-contain rounded-lg"
+          style={{
+            transition:
+              "transform 0.3s ease-out, filter 0.3s ease-out, box-shadow 0.3s ease-out",
+            willChange: "transform, opacity, filter",
+            transformStyle: "preserve-3d",
+            backfaceVisibility: "hidden",
+            WebkitBackfaceVisibility: "hidden",
+            boxShadow:
+              "0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.05)",
+          }}
+        />
+
+        {/* Next image (for transitions) */}
+        <img
+          ref={nextImageRef}
+          alt=""
+          className="absolute max-w-[90vw] max-h-[75vh] w-auto h-auto object-contain rounded-lg"
+          style={{
+            display: "none",
+            transition:
+              "transform 0.3s ease-out, filter 0.3s ease-out, box-shadow 0.3s ease-out",
+            willChange: "transform, opacity, filter",
+            transformStyle: "preserve-3d",
+            backfaceVisibility: "hidden",
+            WebkitBackfaceVisibility: "hidden",
+            boxShadow:
+              "0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.05)",
+          }}
+        />
+      </div>
+
+      {/* Text overlay - higher z-index to ensure it's above flash overlay */}
+      <div
+        ref={textRef}
+        className="absolute bottom-0 left-0 right-0 z-50 px-6 md:px-12 pb-4 text-center pointer-events-none"
+        style={{
+          background: isWinnerRevealed
+            ? "linear-gradient(to top, rgba(0, 0, 0, 0.95) 0%, rgba(0, 0, 0, 0.92) 20%, rgba(0, 0, 0, 0.88) 40%, rgba(0, 0, 0, 0.8) 60%, rgba(0, 0, 0, 0.6) 80%, transparent 100%)"
+            : "linear-gradient(to top, rgba(5, 8, 16, 0.98) 0%, rgba(5, 8, 16, 0.85) 40%, rgba(5, 8, 16, 0.5) 70%, transparent 100%)",
+        }}
+      >
+        <div className="max-w-5xl mx-auto space-y-2">
+          {/* Description */}
+          {currentImageInfo.description &&
+            (() => {
+              const descriptionParts = currentImageInfo.description.split("\n")
+              const vietnameseText = descriptionParts[0] || ""
+              const japaneseText = descriptionParts[1] || ""
+
+              return (
+                <div className="">
+                  {/* Vietnamese */}
+                  {vietnameseText && (
                     <p
-                      className="text-xl md:text-2xl lg:text-3xl font-bold"
+                      className="text-xl md:text-2xl font-bold"
                       style={{
-                        background:
-                          "linear-gradient(135deg, #ffffff 0%, #e0e7ff 40%, #c7d2fe 70%,rgb(102, 116, 186) 100%)",
-                        WebkitBackgroundClip: "text",
-                        WebkitTextFillColor: "transparent",
-                        backgroundClip: "text",
                         textShadow:
-                          "0 2px 15px rgba(130, 147, 234, 0.95), 0 4px 25px rgba(102, 155, 225, 0.85), 0 0 50px rgba(130, 147, 234, 0.4), 0 0 80px rgba(133, 180, 240, 0.25)",
-                        letterSpacing: "-0.01em",
+                          "0 1px 8px rgba(0, 0, 0, 0.95), 0 2px 15px rgba(0, 0, 0, 0.8), 0 0 30px rgba(139, 92, 246, 0.3), 0 0 50px rgba(167, 139, 250, 0.2)",
+                        letterSpacing: "0.08em",
                         lineHeight: "1.5",
-                        filter: "drop-shadow(0 3px 10px rgba(0, 0, 0, 0.7))",
+                        opacity: 0.8,
+                        filter: "drop-shadow(0 3px 10px rgba(0, 0, 0, 0.51))",
                       }}
                     >
                       {vietnameseText}
                     </p>
-                  </div>
-                )}
-              
-                
-                {/* Tiếng Nhật - Style nhỏ hơn, elegant hơn, màu khác, có glow effect */}
-                {japaneseText && (
-                  <div className="mt-2">
+                  )}
+
+                  {/* Japanese */}
+                  {japaneseText && (
                     <p
                       className="text-base md:text-lg lg:text-2xl font-light text-gray-200"
                       style={{
                         textShadow:
                           "0 1px 8px rgba(0, 0, 0, 0.95), 0 2px 15px rgba(0, 0, 0, 0.8), 0 0 30px rgba(139, 92, 246, 0.3), 0 0 50px rgba(167, 139, 250, 0.2)",
                         letterSpacing: "0.08em",
-                        lineHeight: "1.8",
+                        lineHeight: "1.2",
                         fontStyle: "normal",
-                        opacity: 0.95,
-                        fontFamily: "'Hiragino Kaku Gothic ProN', 'Hiragino Sans', 'Yu Gothic', 'Meiryo', sans-serif",
+                        opacity: 0.9,
+                        fontFamily:
+                          "'Hiragino Kaku Gothic ProN', 'Hiragino Sans', 'Yu Gothic', 'Meiryo', sans-serif",
                       }}
                     >
                       {japaneseText}
                     </p>
-                  </div>
-                )}
-              </div>
-            )
-          })()}
+                  )}
+                </div>
+              )
+            })()}
 
-          {/* Actor name - ở dưới với gradient đẹp */}
+          {/* Actor name */}
           {currentImageInfo.actor && (
-            <div className="mt-6">
+            <div
+              className="mt-2 relative z-50"
+              style={{ position: "relative" }}
+            >
               <h2
-                className="text-2xl md:text-3xl lg:text-4xl xl:text-5xl font-bold tracking-tight"
+                className={`text-2xl md:text-3xl lg:text-4xl xl:text-5xl font-bold tracking-tight relative z-10 ${
+                  isWinnerRevealed ? "animate-pulse" : ""
+                }`}
                 style={{
-                  background:
-                    "linear-gradient(135deg, #ffffff 0%, #e0e7ff 30%, #c7d2fe 60%, #a5b4fc 100%)",
-                  WebkitBackgroundClip: "text",
-                  WebkitTextFillColor: "transparent",
-                  backgroundClip: "text",
-                  textShadow:
-                    "0 0 40px rgba(167, 139, 250, 0.5), 0 4px 20px rgba(0, 0, 0, 0.8), 0 0 60px rgba(99, 102, 241, 0.3)",
-                  filter: "drop-shadow(0 2px 10px rgba(0, 0, 0, 0.5))",
+                  color: isWinnerRevealed ? "#ffd700" : "transparent", // Use solid color for winner
+                  background: isWinnerRevealed
+                    ? "none" // No gradient for winner - use solid color
+                    : "linear-gradient(135deg, #ffffff 0%, #e0e7ff 30%, #c7d2fe 60%, #a5b4fc 100%)",
+                  WebkitBackgroundClip: isWinnerRevealed ? "unset" : "text",
+                  WebkitTextFillColor: isWinnerRevealed
+                    ? "#ffd700"
+                    : "transparent",
+                  backgroundClip: isWinnerRevealed ? "unset" : "text",
+                  textShadow: isWinnerRevealed
+                    ? "0 0 20px rgba(255, 215, 0, 1), 0 2px 10px rgba(0, 0, 0, 1), 0 4px 20px rgba(0, 0, 0, 1), 0 0 40px rgba(255, 215, 0, 0.8), 3px 3px 6px rgba(0, 0, 0, 1)"
+                    : "0 0 40px rgba(214, 224, 231, 0.5), 0 4px 20px rgba(22, 198, 241, 0.54), 0 0 60px rgba(230, 237, 244, 0.3)",
+                  filter: isWinnerRevealed
+                    ? "drop-shadow(0 4px 20px rgba(0, 0, 0, 1)) drop-shadow(0 0 30px rgba(255, 215, 0, 0.9))"
+                    : "drop-shadow(0 2px 10px rgba(0, 0, 0, 0.5))",
                   letterSpacing: "-0.02em",
+                  animation: isWinnerRevealed
+                    ? "glowPulse 2s ease-in-out infinite"
+                    : "none",
+                  position: "relative",
+                  zIndex: 10,
+                  fontWeight: 900,
+                  lineHeight: 1.5,
                 }}
               >
                 {currentImageInfo.actor}
+                {isWinnerRevealed && (
+                  <span
+                    className="ml-3 text-3xl md:text-4xl lg:text-5xl xl:text-6xl"
+                    style={{
+                      filter: "drop-shadow(0 2px 8px rgba(0, 0, 0, 1))",
+                    }}
+                  >
+                    🏆
+                  </span>
+                )}
               </h2>
             </div>
           )}
 
-          {/* Progress indicator - ở dưới cùng */}
-          <div className="mt-8 md:mt-10 flex justify-center gap-2">
+          {/* Progress indicator */}
+          <div className="mt-6 flex justify-center gap-2">
             {imageList.map((_, index) => (
               <div
                 key={index}
@@ -925,6 +1116,545 @@ const ImageSlider: React.FC<ImageSliderProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Elegant light rays/bloom for winner reveal - soft and emotional */}
+      {isWinnerRevealed && (
+        <>
+          {/* Soft radial glow */}
+          <div
+            className="absolute inset-0 z-5 pointer-events-none"
+            style={{
+              background:
+                "radial-gradient(circle at center, rgba(255, 215, 0, 0.15) 0%, rgba(255, 215, 0, 0.08) 30%, transparent 50%)",
+              animation: "softGlow 4s ease-in-out infinite",
+              clipPath: "inset(0 0 40% 0)", // Only cover top 60% of screen, leave bottom 40% for text
+            }}
+          />
+          {/* Gentle light rays from center */}
+          <div
+            className="absolute inset-0 z-4 pointer-events-none"
+            style={{
+              background:
+                "radial-gradient(ellipse at center, rgba(255, 215, 0, 0.1) 0%, transparent 60%)",
+              animation: "gentleBloom 5s ease-in-out infinite",
+              clipPath: "inset(0 0 40% 0)",
+            }}
+          />
+        </>
+      )}
+
+      {/* Elegant Side Effects for Winner */}
+      {isWinnerRevealed && (
+        <>
+          {/* Left side elegant sparkles - subtle and emotional */}
+          <div className="absolute left-0 top-0 bottom-0 w-32 md:w-48 z-20 pointer-events-none overflow-hidden">
+            {[...Array(20)].map((_, i) => {
+              const colors = [
+                "#ffd700",
+                "#ffed4e",
+                "#fff8dc",
+                "#ffeb3b",
+                "#ffc107",
+                "#ffd54f",
+                "#ffeb3b",
+                "#fff59d",
+                "#fff176",
+                "#ffd700",
+              ]
+              const color = colors[Math.floor(Math.random() * colors.length)]
+              const size = 3 + Math.random() * 8
+              const leftPos = 0 + Math.random() * 30
+              const topPos = 0 + Math.random() * 100
+
+              return (
+                <div
+                  key={`left-${i}`}
+                  data-firework="left"
+                  className="absolute rounded-full"
+                  style={{
+                    left: `${leftPos}%`,
+                    top: `${topPos}%`,
+                    width: `${size}px`,
+                    height: `${size}px`,
+                    background: `radial-gradient(circle, ${color} 0%, ${color}80 50%, transparent 100%)`,
+                    boxShadow: `0 0 ${
+                      15 + Math.random() * 25
+                    }px ${color}, 0 0 ${
+                      8 + Math.random() * 15
+                    }px ${color}, 0 0 ${
+                      4 + Math.random() * 8
+                    }px ${color}, 0 0 ${2 + Math.random() * 4}px ${color}`,
+                    opacity: 0,
+                    willChange: "transform, opacity",
+                    filter: `blur(${Math.random() * 1.5}px)`,
+                  }}
+                />
+              )
+            })}
+          </div>
+
+          {/* Right side elegant sparkles - subtle and emotional */}
+          <div className="absolute right-0 top-0 bottom-0 w-32 md:w-48 z-20 pointer-events-none overflow-hidden">
+            {[...Array(20)].map((_, i) => {
+              const colors = [
+                "#ffd700",
+                "#ffed4e",
+                "#fff8dc",
+                "#ffeb3b",
+                "#ffc107",
+                "#ffd54f",
+                "#ffeb3b",
+                "#fff59d",
+                "#fff176",
+                "#ffd700",
+              ]
+              const color = colors[Math.floor(Math.random() * colors.length)]
+              const size = 3 + Math.random() * 8
+              const rightPos = 0 + Math.random() * 30
+              const topPos = 0 + Math.random() * 100
+
+              return (
+                <div
+                  key={`right-${i}`}
+                  data-firework="right"
+                  className="absolute rounded-full"
+                  style={{
+                    right: `${rightPos}%`,
+                    top: `${topPos}%`,
+                    width: `${size}px`,
+                    height: `${size}px`,
+                    background: `radial-gradient(circle, ${color} 0%, ${color}80 50%, transparent 100%)`,
+                    boxShadow: `0 0 ${
+                      15 + Math.random() * 25
+                    }px ${color}, 0 0 ${
+                      8 + Math.random() * 15
+                    }px ${color}, 0 0 ${
+                      4 + Math.random() * 8
+                    }px ${color}, 0 0 ${2 + Math.random() * 4}px ${color}`,
+                    opacity: 0,
+                    willChange: "transform, opacity",
+                    filter: `blur(${Math.random() * 1.5}px)`,
+                  }}
+                />
+              )
+            })}
+          </div>
+
+          {/* Brilliant light rays from sides */}
+          <div className="absolute inset-0 z-15 pointer-events-none overflow-hidden">
+            {/* Left light ray - multiple layers for brilliance */}
+            <div
+              className="absolute left-0 top-0 bottom-0 w-80 md:w-[500px] opacity-40"
+              style={{
+                background:
+                  "linear-gradient(to right, rgba(255, 215, 0, 0.6) 0%, rgba(255, 215, 0, 0.3) 30%, rgba(255, 215, 0, 0.1) 60%, transparent 100%)",
+                animation: "lightRayLeft 3s ease-in-out infinite",
+                clipPath: "polygon(0 0, 100% 15%, 100% 85%, 0 100%)",
+                filter: "blur(1px)",
+              }}
+            />
+            <div
+              className="absolute left-0 top-0 bottom-0 w-64 md:w-96 opacity-50"
+              style={{
+                background:
+                  "linear-gradient(to right, rgba(255, 215, 0, 0.5) 0%, transparent 100%)",
+                animation: "lightRayLeft 2.5s ease-in-out infinite",
+                clipPath: "polygon(0 0, 100% 20%, 100% 80%, 0 100%)",
+              }}
+            />
+            {/* Right light ray - multiple layers for brilliance */}
+            <div
+              className="absolute right-0 top-0 bottom-0 w-80 md:w-[500px] opacity-40"
+              style={{
+                background:
+                  "linear-gradient(to left, rgba(255, 215, 0, 0.6) 0%, rgba(255, 215, 0, 0.3) 30%, rgba(255, 215, 0, 0.1) 60%, transparent 100%)",
+                animation: "lightRayRight 3s ease-in-out infinite",
+                clipPath: "polygon(0 15%, 100% 0, 100% 100%, 0 85%)",
+                filter: "blur(1px)",
+              }}
+            />
+            <div
+              className="absolute right-0 top-0 bottom-0 w-64 md:w-96 opacity-50"
+              style={{
+                background:
+                  "linear-gradient(to left, rgba(255, 215, 0, 0.5) 0%, transparent 100%)",
+                animation: "lightRayRight 2.5s ease-in-out infinite",
+                clipPath: "polygon(0 20%, 100% 0, 100% 100%, 0 80%)",
+              }}
+            />
+          </div>
+
+          {/* Elegant floating particles - subtle and emotional */}
+          <div className="absolute inset-0 z-18 pointer-events-none overflow-hidden">
+            {[...Array(15)].map((_, i) => {
+              const colors = [
+                "#ffd700",
+                "#ffed4e",
+                "#fff8dc",
+                "#ffeb3b",
+                "#ffc107",
+                "#ffd54f",
+                "#fff59d",
+                "#fff176",
+              ]
+              const color = colors[Math.floor(Math.random() * colors.length)]
+              const size = 2 + Math.random() * 5
+              const leftPos = 20 + Math.random() * 60
+              const topPos = 10 + Math.random() * 80
+
+              return (
+                <div
+                  key={`particle-${i}`}
+                  className="absolute rounded-full"
+                  style={{
+                    left: `${leftPos}%`,
+                    top: `${topPos}%`,
+                    width: `${size}px`,
+                    height: `${size}px`,
+                    background: `radial-gradient(circle, ${color} 0%, transparent 70%)`,
+                    boxShadow: `0 0 ${8 + Math.random() * 15}px ${color}, 0 0 ${
+                      4 + Math.random() * 8
+                    }px ${color}`,
+                    animation: `floatParticle ${
+                      3 + Math.random() * 4
+                    }s ease-in-out infinite`,
+                    animationDelay: `${Math.random() * 3}s`,
+                    opacity: 0.7 + Math.random() * 0.3,
+                    filter: `blur(${Math.random() * 0.8}px)`,
+                  }}
+                />
+              )
+            })}
+          </div>
+
+          {/* Gentle twinkling stars effect */}
+          <div className="absolute inset-0 z-19 pointer-events-none overflow-hidden">
+            {[...Array(12)].map((_, i) => {
+              const colors = ["#ffd700", "#ffed4e", "#fff8dc", "#ffeb3b"]
+              const color = colors[Math.floor(Math.random() * colors.length)]
+              const size = 1 + Math.random() * 3
+              const leftPos = 15 + Math.random() * 70
+              const topPos = 10 + Math.random() * 80
+
+              return (
+                <div
+                  key={`star-${i}`}
+                  className="absolute"
+                  style={{
+                    left: `${leftPos}%`,
+                    top: `${topPos}%`,
+                    width: `${size}px`,
+                    height: `${size}px`,
+                    background: color,
+                    clipPath:
+                      "polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%)",
+                    boxShadow: `0 0 ${6 + Math.random() * 10}px ${color}`,
+                    animation: `twinkle ${
+                      1.5 + Math.random() * 2
+                    }s ease-in-out infinite`,
+                    animationDelay: `${Math.random() * 2}s`,
+                    opacity: 0.8 + Math.random() * 0.2,
+                  }}
+                />
+              )
+            })}
+          </div>
+
+          {/* Gentle floating particles - subtle celebration */}
+          <div className="absolute inset-0 z-17 pointer-events-none overflow-hidden">
+            {[...Array(8)].map((_, i) => {
+              const colors = ["#ffd700", "#ffed4e", "#ffeb3b", "#ffc107"]
+              const color = colors[Math.floor(Math.random() * colors.length)]
+              const size = 2 + Math.random() * 4
+              const leftPos = 30 + Math.random() * 40
+              const topPos = 30 + Math.random() * 40
+
+              return (
+                <div
+                  key={`burst-${i}`}
+                  className="absolute rounded-full"
+                  style={{
+                    left: `${leftPos}%`,
+                    top: `${topPos}%`,
+                    width: `${size}px`,
+                    height: `${size}px`,
+                    background: `radial-gradient(circle, ${color} 0%, transparent 80%)`,
+                    boxShadow: `0 0 ${10 + Math.random() * 20}px ${color}`,
+                    animation: `burstParticle ${
+                      2 + Math.random() * 3
+                    }s ease-out infinite`,
+                    animationDelay: `${Math.random() * 2}s`,
+                    opacity: 0.9,
+                  }}
+                />
+              )
+            })}
+          </div>
+        </>
+      )}
+
+      {/* CSS animations */}
+      <style>{`
+        @keyframes softGlow {
+          0%, 100% {
+            opacity: 0.3;
+            transform: scale(1);
+          }
+          50% {
+            opacity: 0.5;
+            transform: scale(1.05);
+          }
+        }
+        @keyframes gentleBloom {
+          0%, 100% {
+            opacity: 0.2;
+            transform: scale(0.95);
+          }
+          50% {
+            opacity: 0.4;
+            transform: scale(1.1);
+          }
+        }
+        @keyframes glowPulse {
+          0%, 100% {
+            filter: drop-shadow(0 2px 10px rgba(0, 0, 0, 0.5)) drop-shadow(0 0 60px rgba(255, 215, 0, 0.8));
+          }
+          50% {
+            filter: drop-shadow(0 2px 10px rgba(0, 0, 0, 0.5)) drop-shadow(0 0 100px rgba(255, 215, 0, 1));
+          }
+        }
+        .winner-image {
+          animation: winnerPulse 3s ease-in-out infinite, winnerGlow 4s ease-in-out infinite;
+          box-shadow: 0 0 40px rgba(255, 215, 0, 0.4), 0 0 80px rgba(255, 215, 0, 0.3), 0 0 120px rgba(255, 215, 0, 0.2);
+          filter: drop-shadow(0 0 30px rgba(255, 215, 0, 0.5));
+        }
+        @keyframes winnerPulse {
+          0%, 100% {
+            transform: scale(1);
+            box-shadow: 0 0 40px rgba(255, 215, 0, 0.4), 0 0 80px rgba(255, 215, 0, 0.3), 0 0 120px rgba(255, 215, 0, 0.2);
+          }
+          50% {
+            transform: scale(1.02);
+            box-shadow: 0 0 50px rgba(255, 215, 0, 0.5), 0 0 100px rgba(255, 215, 0, 0.4), 0 0 150px rgba(255, 215, 0, 0.3);
+          }
+        }
+        @keyframes winnerGlow {
+          0%, 100% {
+            filter: drop-shadow(0 0 30px rgba(255, 215, 0, 0.5)) drop-shadow(0 0 60px rgba(255, 215, 0, 0.3));
+          }
+          50% {
+            filter: drop-shadow(0 0 40px rgba(255, 215, 0, 0.7)) drop-shadow(0 0 80px rgba(255, 215, 0, 0.5)) drop-shadow(0 0 120px rgba(255, 215, 0, 0.3));
+          }
+        }
+        
+        /* Title animations */
+        @keyframes titleShimmer {
+          0% {
+            background-position: 0% 50%;
+          }
+          50% {
+            background-position: 100% 50%;
+          }
+          100% {
+            background-position: 0% 50%;
+          }
+        }
+        
+        @keyframes titleGlow {
+          0%, 100% {
+            text-shadow: 
+              0 0 40px rgba(167, 139, 250, 0.5), 
+              0 4px 20px rgba(0, 0, 0, 0.8), 
+              0 0 60px rgba(99, 102, 241, 0.3),
+              0 0 80px rgba(139, 92, 246, 0.2);
+            filter: drop-shadow(0 2px 10px rgba(0, 0, 0, 0.5));
+          }
+          50% {
+            text-shadow: 
+              0 0 60px rgba(167, 139, 250, 0.8), 
+              0 4px 30px rgba(0, 0, 0, 0.9), 
+              0 0 90px rgba(99, 102, 241, 0.6),
+              0 0 120px rgba(139, 92, 246, 0.4);
+            filter: drop-shadow(0 2px 15px rgba(0, 0, 0, 0.6)) drop-shadow(0 0 40px rgba(167, 139, 250, 0.4));
+          }
+        }
+        
+        .title-animated {
+          position: relative;
+          animation: titleFloat 4s ease-in-out infinite, titleShimmer 3s ease-in-out infinite, titleGlow 2s ease-in-out infinite;
+        }
+        
+        @keyframes titleFloat {
+          0%, 100% {
+            transform: translateY(0px);
+          }
+          50% {
+            transform: translateY(-5px);
+          }
+        }
+        
+        .title-animated::before {
+          content: '';
+          position: absolute;
+          top: 0;
+          left: -100%;
+          width: 100%;
+          height: 100%;
+          background: linear-gradient(
+            90deg,
+            transparent,
+            rgba(255, 255, 255, 0.3),
+            transparent
+          );
+          animation: titleShine 4s ease-in-out infinite;
+          pointer-events: none;
+          z-index: -1;
+          mix-blend-mode: overlay;
+        }
+        
+        @keyframes titleShine {
+          0% {
+            left: -100%;
+          }
+          50%, 100% {
+            left: 100%;
+          }
+        }
+        
+        /* Ensure text is visible - fallback */
+        .title-animated {
+          -webkit-text-fill-color: transparent;
+          background-clip: text;
+          -webkit-background-clip: text;
+        }
+        
+        /* Fallback for browsers that don't support background-clip */
+        @supports not (background-clip: text) {
+          .title-animated {
+            color: #ffffff !important;
+            background: none !important;
+            -webkit-text-fill-color: #ffffff !important;
+          }
+        }
+        
+        
+        @keyframes confettiFall {
+          0% {
+            transform: translateY(0) rotate(0deg);
+            opacity: 1;
+          }
+          100% {
+            transform: translateY(100vh) rotate(720deg);
+            opacity: 0;
+          }
+        }
+        
+                    /* Elegant light ray animations */
+                    @keyframes lightRayLeft {
+                      0%, 100% {
+                        opacity: 0.2;
+                        transform: translateX(0) translateZ(0);
+                      }
+                      50% {
+                        opacity: 0.4;
+                        transform: translateX(20px) translateZ(10px);
+                      }
+                    }
+                    
+                    @keyframes lightRayRight {
+                      0%, 100% {
+                        opacity: 0.2;
+                        transform: translateX(0) translateZ(0);
+                      }
+                      50% {
+                        opacity: 0.4;
+                        transform: translateX(-20px) translateZ(10px);
+                      }
+                    }
+                    
+                    /* 3D transition enhancements */
+                    @keyframes image3DEnter {
+                      0% {
+                        transform: scale(0.85) translateZ(-250px) rotateY(30deg) rotateX(-10deg);
+                        opacity: 0;
+                        filter: blur(8px) brightness(0.6);
+                      }
+                      100% {
+                        transform: scale(1) translateZ(0) rotateY(0deg) rotateX(0deg);
+                        opacity: 1;
+                        filter: blur(0px) brightness(1);
+                      }
+                    }
+                    
+                    @keyframes image3DExit {
+                      0% {
+                        transform: scale(1) translateZ(0) rotateY(0deg) rotateX(0deg);
+                        opacity: 1;
+                        filter: blur(0px) brightness(1);
+                      }
+                      100% {
+                        transform: scale(0.85) translateZ(-200px) rotateY(-25deg) rotateX(5deg);
+                        opacity: 0;
+                        filter: blur(8px) brightness(0.7);
+                      }
+                    }
+        
+                    /* Brilliant floating particles */
+                    @keyframes floatParticle {
+                      0%, 100% {
+                        transform: translateY(0) translateX(0) scale(1) rotate(0deg);
+                        opacity: 0.7;
+                      }
+                      25% {
+                        transform: translateY(-30px) translateX(15px) scale(1.3) rotate(90deg);
+                        opacity: 1;
+                      }
+                      50% {
+                        transform: translateY(-15px) translateX(-10px) scale(0.8) rotate(180deg);
+                        opacity: 0.9;
+                      }
+                      75% {
+                        transform: translateY(-35px) translateX(10px) scale(1.2) rotate(270deg);
+                        opacity: 0.8;
+                      }
+                    }
+                    
+                    /* Twinkling stars */
+                    @keyframes twinkle {
+                      0%, 100% {
+                        opacity: 0.3;
+                        transform: scale(0.8) rotate(0deg);
+                      }
+                      50% {
+                        opacity: 1;
+                        transform: scale(1.5) rotate(180deg);
+                      }
+                    }
+                    
+                    /* Burst particles */
+                    @keyframes burstParticle {
+                      0% {
+                        transform: scale(0) translate(0, 0);
+                        opacity: 0;
+                      }
+                      20% {
+                        transform: scale(1.5) translate(20px, -20px);
+                        opacity: 1;
+                      }
+                      40% {
+                        transform: scale(1) translate(-15px, 15px);
+                        opacity: 0.9;
+                      }
+                      60% {
+                        transform: scale(1.2) translate(10px, -10px);
+                        opacity: 0.8;
+                      }
+                      100% {
+                        transform: scale(0) translate(30px, -30px);
+                        opacity: 0;
+                      }
+                    }
+      `}</style>
     </div>
   )
 }
