@@ -111,6 +111,9 @@ const ImageSlider: React.FC<ImageSliderProps> = ({
   const shownInRecapRef = useRef<Set<number>>(new Set())
   const recapStartIndexRef = useRef<number | null>(null)
   const isRecapCompleteRef = useRef(false)
+  const isWinnerRevealedRef = useRef(false) // Synchronous ref to track winner state
+  const isStoppedRef = useRef(false) // Synchronous ref to track stopped state
+  const initialDelayCompleteRef = useRef(false) // Track if initial 5-second delay has passed
 
   // State
   const [currentIndex, setCurrentIndex] = useState(0)
@@ -121,6 +124,7 @@ const ImageSlider: React.FC<ImageSliderProps> = ({
   const [isStopped, setIsStopped] = useState(false)
   const [isWinnerRevealed, setIsWinnerRevealed] = useState(false)
   const [isFastRecapMode, setIsFastRecapMode] = useState(false)
+  const [initialDelayComplete, setInitialDelayComplete] = useState(false)
 
   // Use provided images or default to IMAGES_INFO
   const imageList = useMemo(
@@ -134,17 +138,15 @@ const ImageSlider: React.FC<ImageSliderProps> = ({
   // Image display duration (3 seconds for normal, faster for recap mode)
   const NORMAL_IMAGE_DURATION = 3000
   // Memory Recap Mode: 0.3-0.5s per image (randomized for dynamic feel)
-  const getFastRecapDuration = () => 100 + Math.random() * 200 // 300-500ms
+  const getFastRecapDuration = () => 100 + Math.random() * 200
   // Transition duration (faster in recap mode)
   const NORMAL_TRANSITION_DURATION = 1.5
   const FAST_RECAP_TRANSITION_DURATION = 0.3 // Faster transitions in recap mode
   const TRANSITION_DURATION = isFastRecapMode
     ? FAST_RECAP_TRANSITION_DURATION
     : NORMAL_TRANSITION_DURATION
-  // Memory Recap Mode total duration (~5 seconds)
-  const MEMORY_RECAP_DURATION = 5000
-  // Time to stop at winner image (25 seconds)
-  const STOP_AFTER_MS = 4000
+  // Initial delay before starting slideshow (5 seconds)
+  const INITIAL_DELAY_MS = 5000
   // Find index of winner image
   const WINNER_INDEX = useMemo(() => {
     const index = imageList.findIndex(
@@ -163,11 +165,25 @@ const ImageSlider: React.FC<ImageSliderProps> = ({
   const transitionToNext = useCallback(
     async (nextIndex: number, isWinnerTransition = false) => {
       // CRITICAL: Stop all transitions if winner is already revealed (unless this IS the winner transition)
-      if (isWinnerRevealed && !isWinnerTransition) {
-        console.log("Winner already revealed, blocking transition")
+      // Check both state and ref for immediate blocking
+      if (
+        (isWinnerRevealed || isWinnerRevealedRef.current) &&
+        !isWinnerTransition
+      ) {
+        console.log(
+          "Winner already revealed, blocking transition - isWinnerRevealed:",
+          isWinnerRevealed,
+          "ref:",
+          isWinnerRevealedRef.current
+        )
         return
       }
-      
+
+      if ((isStopped || isStoppedRef.current) && !isWinnerTransition) {
+        console.log("Slideshow stopped, blocking transition")
+        return
+      }
+
       // Validate index first
       if (nextIndex < 0 || nextIndex >= imageList.length) {
         console.warn(
@@ -193,6 +209,27 @@ const ImageSlider: React.FC<ImageSliderProps> = ({
         console.log(
           `Winner transition confirmed: index ${nextIndex}, actor: ${winnerImageInfo.actor}, image: ${winnerImageInfo.image}`
         )
+
+        // CRITICAL: Set refs IMMEDIATELY when winner transition starts (not waits for completion)
+        // This prevents any other transitions from starting
+        isWinnerRevealedRef.current = true
+        isStoppedRef.current = true
+
+        // IMMEDIATELY stop all intervals/timeouts
+        if (intervalRef.current) {
+          if (isFastRecapMode) {
+            clearTimeout(intervalRef.current as unknown as NodeJS.Timeout)
+          } else {
+            clearInterval(intervalRef.current)
+          }
+          intervalRef.current = null
+        }
+
+        // Clear recap mode timer if it exists
+        if (recapModeTimerRef.current) {
+          clearTimeout(recapModeTimerRef.current)
+          recapModeTimerRef.current = null
+        }
       }
 
       if (isTransitioningRef.current) {
@@ -293,12 +330,18 @@ const ImageSlider: React.FC<ImageSliderProps> = ({
           duration: NORMAL_TRANSITION_DURATION * 1.3, // Always use normal duration for winner
           ease: "back.out(2)",
           onComplete: () => {
-            console.log("Winner transition complete - stopping all slideshow activity")
-            
-            // Stop slideshow completely - set states first
+            console.log(
+              "Winner transition complete - stopping all slideshow activity"
+            )
+
+            // CRITICAL: Set refs FIRST (synchronous) before state updates (async)
+            isWinnerRevealedRef.current = true
+            isStoppedRef.current = true
+
+            // Stop slideshow completely - set states
             setIsStopped(true)
             setIsWinnerRevealed(true)
-            
+
             // Immediately clear any running intervals/timeouts
             if (intervalRef.current) {
               if (isFastRecapMode) {
@@ -314,7 +357,7 @@ const ImageSlider: React.FC<ImageSliderProps> = ({
               clearTimeout(recapModeTimerRef.current)
               recapModeTimerRef.current = null
             }
-            
+
             // Set transitioning ref to false to allow winner effects
             isTransitioningRef.current = false
             setIsTransitioning(false)
@@ -428,6 +471,14 @@ const ImageSlider: React.FC<ImageSliderProps> = ({
 
       // Complete transition
       setTimeout(() => {
+        // Check if winner was revealed during transition - if so, don't swap refs
+        if (isWinnerRevealedRef.current || isStoppedRef.current) {
+          console.log("Winner revealed during transition, skipping ref swap")
+          isTransitioningRef.current = false
+          setIsTransitioning(false)
+          return
+        }
+
         // Hide current image and reset transforms
         currentImg.style.display = "none"
         currentImg.style.opacity = "1"
@@ -465,7 +516,7 @@ const ImageSlider: React.FC<ImageSliderProps> = ({
   const getNextRecapIndex = useCallback(
     (startIndex: number): number | null => {
       if (imageList.length === 0) return null
-      
+
       // If recap hasn't started, start from index 0
       if (recapStartIndexRef.current === null) {
         recapStartIndexRef.current = 0
@@ -474,7 +525,7 @@ const ImageSlider: React.FC<ImageSliderProps> = ({
 
       // Find next index sequentially, skipping winner
       let nextIndex = startIndex + 1
-      
+
       // If we've gone through all images, return null to signal completion
       if (nextIndex >= imageList.length) {
         return null
@@ -568,7 +619,21 @@ const ImageSlider: React.FC<ImageSliderProps> = ({
 
   // Auto-advance slideshow - continue cycling through all images until timer triggers
   useEffect(() => {
-    if (imageList.length === 0 || isStopped || isWinnerRevealed) {
+    // Wait for initial delay before starting slideshow
+    if (!initialDelayComplete && !initialDelayCompleteRef.current) {
+      console.log("Waiting for initial delay before starting slideshow")
+      return
+    }
+    
+    // Check both state and ref for immediate stopping
+    const shouldStop =
+      imageList.length === 0 ||
+      isStopped ||
+      isStoppedRef.current ||
+      isWinnerRevealed ||
+      isWinnerRevealedRef.current
+
+    if (shouldStop) {
       // Clear interval/timeout if winner is revealed or stopped
       if (intervalRef.current) {
         if (isFastRecapMode) {
@@ -578,7 +643,16 @@ const ImageSlider: React.FC<ImageSliderProps> = ({
         }
         intervalRef.current = null
       }
-      console.log("Slideshow stopped - isStopped:", isStopped, "isWinnerRevealed:", isWinnerRevealed)
+      console.log(
+        "Slideshow stopped - isStopped:",
+        isStopped,
+        "ref:",
+        isStoppedRef.current,
+        "isWinnerRevealed:",
+        isWinnerRevealed,
+        "ref:",
+        isWinnerRevealedRef.current
+      )
       return
     }
 
@@ -601,52 +675,111 @@ const ImageSlider: React.FC<ImageSliderProps> = ({
     }
 
     const scheduleNext = () => {
-      // CRITICAL: Stop scheduling if winner is revealed
-      if (isWinnerRevealed || isStopped) {
-        console.log("Winner revealed or stopped, canceling scheduleNext")
+      // CRITICAL: Stop scheduling if winner is revealed - check both state and ref
+      if (
+        isWinnerRevealed ||
+        isWinnerRevealedRef.current ||
+        isStopped ||
+        isStoppedRef.current
+      ) {
+        console.log(
+          "Winner revealed or stopped, canceling scheduleNext - isWinnerRevealed:",
+          isWinnerRevealed,
+          "ref:",
+          isWinnerRevealedRef.current,
+          "isStopped:",
+          isStopped,
+          "ref:",
+          isStoppedRef.current
+        )
+        // Clear interval/timeout if still exists
+        if (intervalRef.current) {
+          if (isFastRecapMode) {
+            clearTimeout(intervalRef.current as unknown as NodeJS.Timeout)
+          } else {
+            clearInterval(intervalRef.current)
+          }
+          intervalRef.current = null
+        }
         return
       }
-      
+
       if (
         !isTransitioningRef.current &&
         !isTransitioning &&
         !isStopped &&
-        !isWinnerRevealed
+        !isStoppedRef.current &&
+        !isWinnerRevealed &&
+        !isWinnerRevealedRef.current
       ) {
         let nextIndex: number | null
-        
+
         if (isFastRecapMode) {
           // Memory Recap Mode: Sequential through all images, skipping winner
           nextIndex = getNextRecapIndex(currentIndexRef.current)
-          
+
           if (nextIndex === null) {
             // Recap complete! All images shown (except winner)
-            console.log("Memory Recap Mode complete! All images shown. Transitioning to winner...")
+            console.log(
+              "Memory Recap Mode complete! All images shown. Transitioning to winner..."
+            )
             isRecapCompleteRef.current = true
-            
+
             // Stop recap cycling
             if (intervalRef.current) {
               clearTimeout(intervalRef.current as unknown as NodeJS.Timeout)
               intervalRef.current = null
             }
-            
+
             // Transition to winner after a brief pause
             setTimeout(() => {
-              if (WINNER_INDEX !== -1 && !isTransitioningRef.current) {
+              // Double check that winner hasn't been revealed yet
+              if (
+                WINNER_INDEX !== -1 &&
+                !isTransitioningRef.current &&
+                !isWinnerRevealedRef.current &&
+                !isStoppedRef.current
+              ) {
                 transitionToNext(WINNER_INDEX, true)
+              } else {
+                console.log(
+                  "Skipping winner transition - already revealed or stopped"
+                )
               }
             }, 300)
             return
           }
-          
+
           // Track shown images in recap
           shownInRecapRef.current.add(nextIndex)
         } else {
           // Normal mode: Continue cycling through all images
           nextIndex = getNextValidIndex(currentIndexRef.current)
         }
-        
+
         if (nextIndex !== null && nextIndex !== currentIndexRef.current) {
+          // FINAL CHECK: Don't transition if winner is revealed
+          if (
+            isWinnerRevealedRef.current ||
+            isStoppedRef.current ||
+            isWinnerRevealed ||
+            isStopped
+          ) {
+            console.log(
+              "FINAL CHECK: Winner revealed or stopped, blocking transition to index",
+              nextIndex
+            )
+            // Clear interval/timeout
+            if (intervalRef.current) {
+              if (isFastRecapMode) {
+                clearTimeout(intervalRef.current as unknown as NodeJS.Timeout)
+              } else {
+                clearInterval(intervalRef.current)
+              }
+              intervalRef.current = null
+            }
+            return
+          }
           transitionToNext(nextIndex, false) // Always pass false - winner transition handled separately
         }
       }
@@ -655,7 +788,22 @@ const ImageSlider: React.FC<ImageSliderProps> = ({
     // In fast recap mode, use dynamic duration for each transition
     if (isFastRecapMode) {
       const scheduleRecapTransition = () => {
+        // Check refs FIRST before scheduling
+        if (isWinnerRevealedRef.current || isStoppedRef.current) {
+          console.log("Winner revealed or stopped, canceling recap schedule")
+          intervalRef.current = null
+          return
+        }
+
         scheduleNext()
+
+        // Check again before scheduling next
+        if (isWinnerRevealedRef.current || isStoppedRef.current) {
+          console.log("Winner revealed or stopped, canceling recap schedule")
+          intervalRef.current = null
+          return
+        }
+
         const duration = getCurrentDuration()
         intervalRef.current = setTimeout(() => {
           scheduleRecapTransition()
@@ -665,6 +813,15 @@ const ImageSlider: React.FC<ImageSliderProps> = ({
     } else {
       // Normal mode: fixed interval
       intervalRef.current = setInterval(() => {
+        // Check refs FIRST before scheduling
+        if (isWinnerRevealedRef.current || isStoppedRef.current) {
+          console.log("Winner revealed or stopped, clearing interval")
+          if (intervalRef.current) {
+            clearInterval(intervalRef.current)
+            intervalRef.current = null
+          }
+          return
+        }
         scheduleNext()
       }, NORMAL_IMAGE_DURATION)
     }
@@ -687,101 +844,13 @@ const ImageSlider: React.FC<ImageSliderProps> = ({
     transitionToNext,
     getNextValidIndex,
     isFastRecapMode, // Re-create interval when fast recap mode changes
+    initialDelayComplete, // Re-create interval when initial delay completes
   ])
 
   // Memory Recap Mode: Transition to winner is now handled by completion tracking
   // (No time-based timer - waits for all images to be shown)
 
-  // Legacy timer to stop at winner image after STOP_AFTER_MS (kept for backward compatibility)
-  useEffect(() => {
-    if (
-      isStopped ||
-      WINNER_INDEX === -1 ||
-      winnerTimerSetRef.current ||
-      isFastRecapMode
-    )
-      return
-
-    winnerTimerSetRef.current = true
-    console.log(
-      `Starting ${STOP_AFTER_MS}ms timer. Winner index: ${WINNER_INDEX}`
-    )
-
-    const timer = setTimeout(() => {
-      const currentIdx = currentIndexRef.current
-
-      console.log(
-        `${STOP_AFTER_MS}ms elapsed. Current index: ${currentIdx}, Winner index: ${WINNER_INDEX}`
-      )
-
-      // Wait for any current transition to complete, then transition to winner
-      const transitionToWinner = () => {
-        if (!isTransitioningRef.current) {
-          // Validate winner index before transitioning
-          if (WINNER_INDEX === -1) {
-            console.error("Cannot transition to winner: WINNER_INDEX is -1 (not found)")
-            return
-          }
-          
-          if (WINNER_INDEX >= imageList.length) {
-            console.error(
-              `Invalid WINNER_INDEX: ${WINNER_INDEX}, imageList length: ${imageList.length}`
-            )
-            return
-          }
-          
-          const winnerImageInfo = imageList[WINNER_INDEX]
-          console.log(
-            `Transitioning to winner at index ${WINNER_INDEX}, actor: ${winnerImageInfo.actor}, image: ${winnerImageInfo.image}`
-          )
-          
-          transitionToNext(WINNER_INDEX, true) // Pass true to trigger winner effects
-
-          // Stop slideshow after winner transition completes
-          setTimeout(() => {
-            setIsStopped(true)
-            setIsWinnerRevealed(true)
-            // Clear any running intervals
-            if (intervalRef.current) {
-              clearInterval(intervalRef.current)
-              intervalRef.current = null
-            }
-            console.log("Slideshow stopped, winner revealed")
-          }, TRANSITION_DURATION * 1000 * 1.3 + 500)
-        } else {
-          // If currently transitioning, wait a bit and try again
-          setTimeout(transitionToWinner, 100)
-        }
-      }
-
-      if (currentIdx !== WINNER_INDEX) {
-        // Transition to winner if not already showing it
-        transitionToWinner()
-      } else {
-        // Already showing winner, just stop and reveal
-        setIsStopped(true)
-        setIsWinnerRevealed(true)
-        // Clear any running intervals
-        if (intervalRef.current) {
-          clearInterval(intervalRef.current)
-          intervalRef.current = null
-        }
-        // Trigger winner effects
-        if (currentImageRef.current) {
-          currentImageRef.current.classList.add("winner-image")
-          startFireworksAnimations()
-        }
-        console.log("Already showing winner, stopping slideshow")
-      }
-    }, STOP_AFTER_MS)
-
-    return () => {
-      console.log("Clearing winner timer")
-      clearTimeout(timer)
-    }
-  }, [WINNER_INDEX, transitionToNext, startFireworksAnimations])
-
-  // Initialize first image and animate title entrance
+  // Initialize first image and animate title entrance - with 5 second delay
   useEffect(() => {
     if (currentImageRef.current && imageList.length > 0) {
       // Mark first image as shown in first cycle
@@ -789,20 +858,46 @@ const ImageSlider: React.FC<ImageSliderProps> = ({
 
       currentImageRef.current.src = imageList[0].image
       currentImageRef.current.style.opacity = "0"
-      currentImageRef.current.style.transform =
-        "scale(0.9) translateZ(-200px) rotateY(15deg)"
-      currentImageRef.current.style.filter = "blur(5px) brightness(0.7)"
-      currentImageRef.current.style.transformStyle = "preserve-3d"
+      
+      // Wait 5 seconds before starting slideshow
+      console.log(`Waiting ${INITIAL_DELAY_MS}ms before starting slideshow...`)
+      
+      const delayTimer = setTimeout(() => {
+        console.log("Initial delay complete, starting slideshow")
+        initialDelayCompleteRef.current = true
+        setInitialDelayComplete(true) // Trigger re-render to start auto-advance
+        
+        if (currentImageRef.current) {
+          currentImageRef.current.style.transform =
+            "scale(0.9) translateZ(-200px) rotateY(15deg)"
+          currentImageRef.current.style.filter = "blur(5px) brightness(0.7)"
+          currentImageRef.current.style.transformStyle = "preserve-3d"
 
-      gsap.to(currentImageRef.current, {
-        opacity: 1,
-        scale: 1,
-        z: 0,
-        rotationY: 0,
-        filter: "blur(0px) brightness(1)",
-        duration: 1.5,
-        ease: "power3.out",
-      })
+          gsap.to(currentImageRef.current, {
+            opacity: 1,
+            scale: 1,
+            z: 0,
+            rotationY: 0,
+            filter: "blur(0px) brightness(1)",
+            duration: 1.5,
+            ease: "power3.out",
+          })
+        }
+        
+        // Show text overlay with fade-in animation
+        if (textRef.current) {
+          gsap.to(textRef.current, {
+            opacity: 1,
+            visibility: "visible",
+            duration: 0.8,
+            ease: "power2.out",
+          })
+        }
+      }, INITIAL_DELAY_MS)
+      
+      return () => {
+        clearTimeout(delayTimer)
+      }
     }
 
     // Animate title entrance
@@ -993,6 +1088,9 @@ const ImageSlider: React.FC<ImageSliderProps> = ({
           background: isWinnerRevealed
             ? "linear-gradient(to top, rgba(0, 0, 0, 0.95) 0%, rgba(0, 0, 0, 0.92) 20%, rgba(0, 0, 0, 0.88) 40%, rgba(0, 0, 0, 0.8) 60%, rgba(0, 0, 0, 0.6) 80%, transparent 100%)"
             : "linear-gradient(to top, rgba(5, 8, 16, 0.98) 0%, rgba(5, 8, 16, 0.85) 40%, rgba(5, 8, 16, 0.5) 70%, transparent 100%)",
+          opacity: initialDelayComplete || initialDelayCompleteRef.current ? 1 : 0,
+          visibility: initialDelayComplete || initialDelayCompleteRef.current ? "visible" : "hidden",
+          transition: "opacity 0.5s ease-in-out",
         }}
       >
         <div className="max-w-5xl mx-auto space-y-2">
@@ -1402,7 +1500,7 @@ const ImageSlider: React.FC<ImageSliderProps> = ({
           }
           50% {
             opacity: 0.5;
-            transform: scale(1.05);
+            transform: scale(1.2);
           }
         }
         @keyframes gentleBloom {
@@ -1412,7 +1510,7 @@ const ImageSlider: React.FC<ImageSliderProps> = ({
           }
           50% {
             opacity: 0.4;
-            transform: scale(1.1);
+            transform: scale(1.2);
           }
         }
         @keyframes glowPulse {
@@ -1434,7 +1532,7 @@ const ImageSlider: React.FC<ImageSliderProps> = ({
             box-shadow: 0 0 40px rgba(255, 215, 0, 0.4), 0 0 80px rgba(255, 215, 0, 0.3), 0 0 120px rgba(255, 215, 0, 0.2);
           }
           50% {
-            transform: scale(1.02);
+            transform: scale(1.15);
             box-shadow: 0 0 50px rgba(255, 215, 0, 0.5), 0 0 100px rgba(255, 215, 0, 0.4), 0 0 150px rgba(255, 215, 0, 0.3);
           }
         }
