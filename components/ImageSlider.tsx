@@ -63,7 +63,7 @@ const IMAGES_INFO: ImageInfo[] = [
     description: "Hơn cả đồng nghiệp\n同僚以上の関係",
   },
   {
-    image: "/images/TẾT 2025 - Ly Tran Thi Khanh.jpg",
+    image: "/images/Ly Tran Thi Khanh.jpg",
     actor: "Trần Thị Khánh Ly",
     description:
       "Khi nam thần tạm nghỉ, niềm vui lên ngôi\nイケメンのイメージを忘れて、笑いが主役",
@@ -142,9 +142,9 @@ const ImageSlider: React.FC<ImageSliderProps> = ({
   const NORMAL_IMAGE_DURATION = 3000
   // Memory Recap Mode: 0.3-0.5s per image (randomized for dynamic feel)
   const getFastRecapDuration = () => 100 + Math.random() * 200
-  // Transition duration (faster in recap mode)
-  const NORMAL_TRANSITION_DURATION = 1.5
-  const FAST_RECAP_TRANSITION_DURATION = 0.3 // Faster transitions in recap mode
+  // Transition duration (faster in recap mode) - reduced for better performance
+  const NORMAL_TRANSITION_DURATION = 1.0 // Reduced from 1.5s
+  const FAST_RECAP_TRANSITION_DURATION = 0.25 // Reduced from 0.3s
   const TRANSITION_DURATION = isFastRecapMode
     ? FAST_RECAP_TRANSITION_DURATION
     : NORMAL_TRANSITION_DURATION
@@ -295,43 +295,37 @@ const ImageSlider: React.FC<ImageSliderProps> = ({
         zMovement = -200
       }
 
-      // Exit animation for current image - 3D flip out with enhanced shadow
+      // Exit animation - simplified for maximum performance
+      currentImg.style.willChange = "transform, opacity"
+      
       gsap.to(currentImg, {
         opacity: 0,
-        scale: isFastRecapMode ? 0.75 : 0.85,
-        y: isFastRecapMode ? -20 : -30,
-        x: isFastRecapMode ? -xMovement * 0.6 : 0,
-        rotationY: -rotationY * (isFastRecapMode ? 0.9 : 0.8),
-        rotationX: rotationX * (isFastRecapMode ? 0.9 : 0.8),
-        z: zMovement,
-        filter: isFastRecapMode
-          ? "blur(6px) brightness(0.6)"
-          : "blur(8px) brightness(0.7)",
-        boxShadow: "0 10px 20px -5px rgba(0, 0, 0, 0.3)",
+        scale: isFastRecapMode ? 0.85 : 0.9,
+        y: isFastRecapMode ? -15 : -20,
+        // Removed: rotationY, rotationX, z, filter, x - these are expensive
         duration: TRANSITION_DURATION,
-        ease: isFastRecapMode ? "power1.inOut" : "power2.in", // Faster easing in recap mode
+        ease: isFastRecapMode ? "power1.out" : "power1.inOut",
+        force3D: true,
+        onComplete: () => {
+          currentImg.style.willChange = "auto"
+        }
       })
 
       // Entrance animation for next image
       if (isWinner) {
-        // Special dramatic 3D entrance for winner - only when triggered by timer
+        // Winner entrance - simplified for performance
         nextImg.style.opacity = "0"
-        nextImg.style.transform =
-          "scale(0.8) translateY(40px) translateZ(-300px) rotateY(30deg) rotateX(-10deg)"
-        nextImg.style.filter = "blur(10px) brightness(0.5)"
+        nextImg.style.transform = "scale3d(0.85, 0.85, 1) translate3d(0, 30px, 0)"
+        nextImg.style.willChange = "transform, opacity"
 
         gsap.to(nextImg, {
           opacity: 1,
           scale: 1.05,
           y: 0,
-          z: 0,
-          rotationY: 0,
-          rotationX: 0,
-          filter: "blur(0px) brightness(1)",
-          boxShadow:
-            "0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.05), 0 0 60px rgba(255, 215, 0, 0.3)",
-          duration: NORMAL_TRANSITION_DURATION * 1.3, // Always use normal duration for winner
-          ease: "back.out(2)",
+          // Removed: z, rotationY, rotationX, filter, boxShadow
+          duration: NORMAL_TRANSITION_DURATION * 1.2,
+          ease: "back.out(1.5)",
+          force3D: true,
           onComplete: () => {
             console.log(
               "Winner transition complete - stopping all slideshow activity"
@@ -367,6 +361,7 @@ const ImageSlider: React.FC<ImageSliderProps> = ({
 
             // Add winner effects
             nextImg.classList.add("winner-image")
+            nextImg.style.willChange = "auto" // Reset after animation
 
             // Start fireworks animations after a short delay to ensure DOM is ready
             setTimeout(() => {
@@ -375,42 +370,36 @@ const ImageSlider: React.FC<ImageSliderProps> = ({
           },
         })
       } else {
-        // Beautiful 3D entrance with perspective
-        // Memory Recap Mode: More dynamic entrance (like flipping memories)
-        const entranceX = isFastRecapMode ? xMovement : 0
-        const entranceZ = isFastRecapMode ? -zMovement * 0.8 : -250
+        // Simplified entrance animation for maximum performance
+        const initialScale = isFastRecapMode ? 0.85 : 0.9
 
         nextImg.style.opacity = "0"
-        nextImg.style.transform = `scale(${
-          isFastRecapMode ? 0.8 : 0.85
-        }) translateY(30px) translateX(${entranceX}px) translateZ(${entranceZ}px) rotateY(${rotationY}deg) rotateX(${rotationX}deg)`
-        nextImg.style.filter = isFastRecapMode
-          ? "blur(6px) brightness(0.5)"
-          : "blur(8px) brightness(0.6)"
+        nextImg.style.transform = `scale3d(${initialScale}, ${initialScale}, 1) translate3d(0, 20px, 0)`
+        // Removed: blur, rotations, z-axis transforms
+        nextImg.style.willChange = "transform, opacity"
 
         gsap.to(nextImg, {
           opacity: 1,
           scale: 1,
           y: 0,
-          x: 0,
-          z: 0,
-          rotationY: 0,
-          rotationX: 0,
-          filter: "blur(0px) brightness(1)",
-          boxShadow:
-            "0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.05)",
+          // Removed: x, z, rotationY, rotationX, filter, boxShadow
           duration: TRANSITION_DURATION,
-          ease: isFastRecapMode ? "power1.out" : "power3.out", // Faster easing in recap mode
+          ease: isFastRecapMode ? "power1.out" : "power1.inOut",
+          force3D: true,
+          onComplete: () => {
+            nextImg.style.willChange = "auto"
+          }
         })
       }
 
-      // Text animation
+      // Text animation - simplified
       if (textRef.current) {
+        textRef.current.style.willChange = "opacity"
         gsap.to(textRef.current, {
           opacity: 0,
-          y: -20,
-          duration: TRANSITION_DURATION * 0.5,
-          ease: "power1.inOut",
+          duration: TRANSITION_DURATION * 0.4,
+          ease: "power1.out",
+          force3D: true,
           onComplete: () => {
             setCurrentImageInfo(nextImageInfo)
             setCurrentIndex(nextIndex)
@@ -431,16 +420,19 @@ const ImageSlider: React.FC<ImageSliderProps> = ({
                 setTimeout(() => {
                   console.log("Switching to MEMORY RECAP MODE - Grid Phase")
 
-                  // Smooth transition to recap mode - fade out current image first
+                  // Smooth transition to recap mode - simplified for performance
                   if (currentImageRef.current) {
+                    currentImageRef.current.style.willChange = "transform, opacity"
                     gsap.to(currentImageRef.current, {
                       opacity: 0,
-                      scale: 0.8,
-                      z: -300,
-                      filter: "blur(10px) brightness(0.5)",
-                      duration: 0.6,
-                      ease: "power2.in",
+                      scale: 0.85,
+                      duration: 0.5,
+                      ease: "power1.in",
+                      force3D: true,
                       onComplete: () => {
+                        if (currentImageRef.current) {
+                          currentImageRef.current.style.willChange = "auto"
+                        }
                         setIsFastRecapMode(true)
                         setRecapPhase("grid")
                         recapModeStartTimeRef.current = Date.now()
@@ -466,12 +458,17 @@ const ImageSlider: React.FC<ImageSliderProps> = ({
               if (textRef.current) {
                 gsap.fromTo(
                   textRef.current,
-                  { opacity: 0, y: 20 },
+                  { opacity: 0 },
                   {
                     opacity: 1,
-                    y: 0,
-                    duration: TRANSITION_DURATION * 0.5,
+                    duration: TRANSITION_DURATION * 0.4,
                     ease: "power1.out",
+                    force3D: true,
+                    onComplete: () => {
+                      if (textRef.current) {
+                        textRef.current.style.willChange = "auto"
+                      }
+                    }
                   }
                 )
               }
@@ -498,25 +495,28 @@ const ImageSlider: React.FC<ImageSliderProps> = ({
             setTimeout(() => {
               console.log("Switching to MEMORY RECAP MODE - Grid Phase")
 
-              // Smooth transition to recap mode - fade out current image first
-              if (currentImageRef.current) {
-                gsap.to(currentImageRef.current, {
-                  opacity: 0,
-                  scale: 0.8,
-                  z: -300,
-                  filter: "blur(10px) brightness(0.5)",
-                  duration: 0.6,
-                  ease: "power2.in",
-                  onComplete: () => {
-                    setIsFastRecapMode(true)
-                    setRecapPhase("grid")
-                    recapModeStartTimeRef.current = Date.now()
-                    // Reset recap tracking
-                    shownInRecapRef.current.clear()
-                    recapStartIndexRef.current = null
-                    isRecapCompleteRef.current = false
-                  },
-                })
+                  // Smooth transition to recap mode - simplified for performance
+                  if (currentImageRef.current) {
+                    currentImageRef.current.style.willChange = "transform, opacity"
+                    gsap.to(currentImageRef.current, {
+                      opacity: 0,
+                      scale: 0.85,
+                      duration: 0.5,
+                      ease: "power1.in",
+                      force3D: true,
+                      onComplete: () => {
+                        if (currentImageRef.current) {
+                          currentImageRef.current.style.willChange = "auto"
+                        }
+                        setIsFastRecapMode(true)
+                        setRecapPhase("grid")
+                        recapModeStartTimeRef.current = Date.now()
+                        // Reset recap tracking
+                        shownInRecapRef.current.clear()
+                        recapStartIndexRef.current = null
+                        isRecapCompleteRef.current = false
+                      },
+                    })
               } else {
                 setIsFastRecapMode(true)
                 setRecapPhase("grid")
@@ -543,14 +543,12 @@ const ImageSlider: React.FC<ImageSliderProps> = ({
         // Hide current image and reset transforms
         currentImg.style.display = "none"
         currentImg.style.opacity = "1"
-        currentImg.style.transform =
-          "scale(1) translateY(0) translateZ(0) rotateY(0deg) rotateX(0deg)"
-        currentImg.style.filter = "blur(0px) brightness(1)"
+        currentImg.style.transform = "scale3d(1, 1, 1) translate3d(0, 0, 0)"
+        currentImg.style.willChange = "auto"
 
         // Reset next image transforms
-        nextImg.style.transform =
-          "scale(1) translateY(0) translateZ(0) rotateY(0deg) rotateX(0deg)"
-        nextImg.style.filter = "blur(0px) brightness(1)"
+        nextImg.style.transform = "scale3d(1, 1, 1) translate3d(0, 0, 0)"
+        nextImg.style.willChange = "auto"
 
         // Swap refs
         const temp = currentImageRef.current
@@ -977,20 +975,20 @@ const ImageSlider: React.FC<ImageSliderProps> = ({
                     currentImageRef.current.style.display = "block"
                     currentImageRef.current.style.opacity = "0"
                     currentImageRef.current.style.transform =
-                      "scale(0.2) translateZ(-600px) rotateY(20deg)"
-                    currentImageRef.current.style.filter =
-                      "blur(10px) brightness(0.5)"
+                      "scale3d(0.3, 0.3, 1) translate3d(0, 0, 0)"
+                    currentImageRef.current.style.willChange = "transform, opacity"
 
-                    // Zoom in winner with dramatic effect
+                    // Zoom in winner - simplified
                     gsap.to(currentImageRef.current, {
                       opacity: 1,
                       scale: 1.05,
-                      z: 0,
-                      rotationY: 0,
-                      filter: "blur(0px) brightness(1)",
-                      duration: 1.8,
-                      ease: "back.out(2.5)",
+                      duration: 1.5,
+                      ease: "back.out(1.5)",
+                      force3D: true,
                       onComplete: () => {
+                        if (currentImageRef.current) {
+                          currentImageRef.current.style.willChange = "auto"
+                        }
                         // Trigger winner transition with effects
                         transitionToNext(WINNER_INDEX, true)
                       },
@@ -1042,19 +1040,20 @@ const ImageSlider: React.FC<ImageSliderProps> = ({
         setInitialDelayComplete(true) // Trigger re-render to start auto-advance
 
         if (currentImageRef.current) {
-          currentImageRef.current.style.transform =
-            "scale(0.9) translateZ(-200px) rotateY(15deg)"
-          currentImageRef.current.style.filter = "blur(5px) brightness(0.7)"
-          currentImageRef.current.style.transformStyle = "preserve-3d"
+          currentImageRef.current.style.transform = "scale3d(0.9, 0.9, 1) translate3d(0, 0, 0)"
+          currentImageRef.current.style.willChange = "transform, opacity"
 
           gsap.to(currentImageRef.current, {
             opacity: 1,
             scale: 1,
-            z: 0,
-            rotationY: 0,
-            filter: "blur(0px) brightness(1)",
-            duration: 1.5,
-            ease: "power3.out",
+            duration: 1.2,
+            ease: "power1.out",
+            force3D: true,
+            onComplete: () => {
+              if (currentImageRef.current) {
+                currentImageRef.current.style.willChange = "auto"
+              }
+            }
           })
         }
 
@@ -1320,12 +1319,13 @@ const ImageSlider: React.FC<ImageSliderProps> = ({
               alt={currentImageInfo.actor}
               className="absolute max-w-[90vw] max-h-[75vh] w-auto h-auto object-contain rounded-lg"
               style={{
-                transition:
-                  "transform 0.3s ease-out, filter 0.3s ease-out, box-shadow 0.3s ease-out",
-                willChange: "transform, opacity, filter",
+                // Removed CSS transitions - GSAP handles all animations for better performance
+                willChange: "transform, opacity",
                 transformStyle: "preserve-3d",
                 backfaceVisibility: "hidden",
                 WebkitBackfaceVisibility: "hidden",
+                // Hint for GPU acceleration
+                transform: "translate3d(0, 0, 0)",
                 boxShadow:
                   "0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.05)",
               }}
@@ -1338,12 +1338,13 @@ const ImageSlider: React.FC<ImageSliderProps> = ({
               className="absolute max-w-[90vw] max-h-[75vh] w-auto h-auto object-contain rounded-lg"
               style={{
                 display: "none",
-                transition:
-                  "transform 0.3s ease-out, filter 0.3s ease-out, box-shadow 0.3s ease-out",
-                willChange: "transform, opacity, filter",
+                // Removed CSS transitions - GSAP handles all animations for better performance
+                willChange: "transform, opacity",
                 transformStyle: "preserve-3d",
                 backfaceVisibility: "hidden",
                 WebkitBackfaceVisibility: "hidden",
+                // Hint for GPU acceleration
+                transform: "translate3d(0, 0, 0)",
                 boxShadow:
                   "0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.05)",
               }}
@@ -1831,12 +1832,10 @@ const ImageSlider: React.FC<ImageSliderProps> = ({
         }
         @keyframes winnerPulse {
           0%, 100% {
-            transform: scale(1);
-            box-shadow: 0 0 40px rgba(255, 215, 0, 0.4), 0 0 80px rgba(255, 215, 0, 0.3), 0 0 120px rgba(255, 215, 0, 0.2);
+            transform: scale3d(1.02, 1.02, 1);
           }
           50% {
-            transform: scale(1.15);
-            box-shadow: 0 0 50px rgba(255, 215, 0, 0.5), 0 0 100px rgba(255, 215, 0, 0.4), 0 0 150px rgba(255, 215, 0, 0.3);
+            transform: scale3d(1.05, 1.05, 1);
           }
         }
         @keyframes winnerGlow {
@@ -1848,32 +1847,29 @@ const ImageSlider: React.FC<ImageSliderProps> = ({
           }
         }
         
-        /* Memory Recap Mode: Grid image appearance animation */
+        /* Memory Recap Mode: Grid image appearance - simplified for performance */
         @keyframes gridImageAppear {
           0% {
             opacity: 0;
-            transform: scale(0.5) translateZ(-150px) rotateY(25deg) rotateZ(0deg);
+            transform: scale3d(0.6, 0.6, 1);
             visibility: hidden;
-          }
-          50% {
-            opacity: 0.8;
           }
           100% {
             opacity: 1;
-            transform: scale(0.75) translateZ(0) rotateY(0deg);
+            transform: scale3d(0.75, 0.75, 1);
             visibility: visible;
           }
         }
         
-        /* Memory Recap Mode: Flash pulse animation */
+        /* Memory Recap Mode: Flash pulse - simplified for performance */
         @keyframes flashPulse {
           0%, 100% {
-            transform: scale(1.1);
-            box-shadow: 0 0 60px rgba(255, 215, 0, 1), 0 0 120px rgba(255, 215, 0, 0.8), 0 0 180px rgba(255, 215, 0, 0.6);
+            transform: scale3d(1.1, 1.1, 1);
+            opacity: 1;
           }
           50% {
-            transform: scale(1.2);
-            box-shadow: 0 0 80px rgba(255, 215, 0, 1.2), 0 0 150px rgba(255, 215, 0, 1), 0 0 220px rgba(255, 215, 0, 0.8);
+            transform: scale3d(1.15, 1.15, 1);
+            opacity: 0.9;
           }
         }
         
@@ -1881,45 +1877,31 @@ const ImageSlider: React.FC<ImageSliderProps> = ({
         @keyframes sceneTransitionIn {
           0% {
             opacity: 0;
-            transform: scale(0.9) translateZ(-200px);
-            filter: blur(10px);
+            transform: scale3d(0.9, 0.9, 1);
           }
           100% {
             opacity: 1;
-            transform: scale(1) translateZ(0);
-            filter: blur(0px);
+            transform: scale3d(1, 1, 1);
           }
         }
         
         @keyframes sceneFlashTransition {
-          0% {
+          0%, 100% {
             opacity: 1;
-            filter: brightness(1);
           }
           50% {
-            opacity: 0.7;
-            filter: brightness(1.5);
-          }
-          100% {
-            opacity: 1;
-            filter: brightness(1);
+            opacity: 0.85;
           }
         }
         
         @keyframes sceneWinnerTransition {
           0% {
             opacity: 0;
-            transform: scale(0.5) translateZ(-400px);
-            filter: blur(15px) brightness(0.3);
-          }
-          60% {
-            opacity: 0.8;
-            filter: blur(5px) brightness(0.8);
+            transform: scale3d(0.6, 0.6, 1);
           }
           100% {
             opacity: 1;
-            transform: scale(1) translateZ(0);
-            filter: blur(0px) brightness(1);
+            transform: scale3d(1, 1, 1);
           }
         }
         
@@ -2057,30 +2039,26 @@ const ImageSlider: React.FC<ImageSliderProps> = ({
                       }
                     }
                     
-                    /* 3D transition enhancements */
+                    /* Simplified transitions for performance */
                     @keyframes image3DEnter {
                       0% {
-                        transform: scale(0.85) translateZ(-250px) rotateY(30deg) rotateX(-10deg);
+                        transform: scale3d(0.85, 0.85, 1);
                         opacity: 0;
-                        filter: blur(8px) brightness(0.6);
                       }
                       100% {
-                        transform: scale(1) translateZ(0) rotateY(0deg) rotateX(0deg);
+                        transform: scale3d(1, 1, 1);
                         opacity: 1;
-                        filter: blur(0px) brightness(1);
                       }
                     }
                     
                     @keyframes image3DExit {
                       0% {
-                        transform: scale(1) translateZ(0) rotateY(0deg) rotateX(0deg);
+                        transform: scale3d(1, 1, 1);
                         opacity: 1;
-                        filter: blur(0px) brightness(1);
                       }
                       100% {
-                        transform: scale(0.85) translateZ(-200px) rotateY(-25deg) rotateX(5deg);
+                        transform: scale3d(0.85, 0.85, 1);
                         opacity: 0;
-                        filter: blur(8px) brightness(0.7);
                       }
                     }
         
