@@ -102,7 +102,6 @@ const ImageSlider: React.FC<ImageSliderProps> = ({
   const textRef = useRef<HTMLDivElement>(null)
   const isTransitioningRef = useRef(false)
   const currentIndexRef = useRef(0)
-  const winnerTimerSetRef = useRef(false)
   const intervalRef = useRef<NodeJS.Timeout | null>(null)
   const shownInFirstCycleRef = useRef<Set<number>>(new Set())
   const isFirstCycleCompleteRef = useRef(false)
@@ -125,7 +124,9 @@ const ImageSlider: React.FC<ImageSliderProps> = ({
   const [isWinnerRevealed, setIsWinnerRevealed] = useState(false)
   const [isFastRecapMode, setIsFastRecapMode] = useState(false)
   const [initialDelayComplete, setInitialDelayComplete] = useState(false)
-  const [recapPhase, setRecapPhase] = useState<"grid" | "flash" | "winner">("grid")
+  const [recapPhase, setRecapPhase] = useState<"grid" | "flash" | "winner">(
+    "grid"
+  )
   const [flashingImages, setFlashingImages] = useState<number[]>([])
 
   // Use provided images or default to IMAGES_INFO
@@ -421,37 +422,43 @@ const ImageSlider: React.FC<ImageSliderProps> = ({
               // Check if first cycle is complete
               if (shownInFirstCycleRef.current.size >= imageList.length) {
                 console.log(
-                  "First cycle complete! Switching to MEMORY RECAP MODE - Grid Phase"
+                  "First cycle complete! Waiting for full duration before switching to MEMORY RECAP MODE"
                 )
                 isFirstCycleCompleteRef.current = true
-                
-                // Smooth transition to recap mode - fade out current image first
-                if (currentImageRef.current) {
-                  gsap.to(currentImageRef.current, {
-                    opacity: 0,
-                    scale: 0.8,
-                    z: -300,
-                    filter: "blur(10px) brightness(0.5)",
-                    duration: 0.6,
-                    ease: "power2.in",
-                    onComplete: () => {
-                      setIsFastRecapMode(true)
-                      setRecapPhase("grid")
-                      recapModeStartTimeRef.current = Date.now()
-                      // Reset recap tracking
-                      shownInRecapRef.current.clear()
-                      recapStartIndexRef.current = null
-                      isRecapCompleteRef.current = false
-                    }
-                  })
-                } else {
-                  setIsFastRecapMode(true)
-                  setRecapPhase("grid")
-                  recapModeStartTimeRef.current = Date.now()
-                  shownInRecapRef.current.clear()
-                  recapStartIndexRef.current = null
-                  isRecapCompleteRef.current = false
-                }
+
+                // Wait for the full image duration before switching to recap mode
+                // This ensures the last image is displayed for the full duration
+                setTimeout(() => {
+                  console.log("Switching to MEMORY RECAP MODE - Grid Phase")
+
+                  // Smooth transition to recap mode - fade out current image first
+                  if (currentImageRef.current) {
+                    gsap.to(currentImageRef.current, {
+                      opacity: 0,
+                      scale: 0.8,
+                      z: -300,
+                      filter: "blur(10px) brightness(0.5)",
+                      duration: 0.6,
+                      ease: "power2.in",
+                      onComplete: () => {
+                        setIsFastRecapMode(true)
+                        setRecapPhase("grid")
+                        recapModeStartTimeRef.current = Date.now()
+                        // Reset recap tracking
+                        shownInRecapRef.current.clear()
+                        recapStartIndexRef.current = null
+                        isRecapCompleteRef.current = false
+                      },
+                    })
+                  } else {
+                    setIsFastRecapMode(true)
+                    setRecapPhase("grid")
+                    recapModeStartTimeRef.current = Date.now()
+                    shownInRecapRef.current.clear()
+                    recapStartIndexRef.current = null
+                    isRecapCompleteRef.current = false
+                  }
+                }, NORMAL_IMAGE_DURATION) // Wait full duration before switching
               }
             }
 
@@ -481,36 +488,44 @@ const ImageSlider: React.FC<ImageSliderProps> = ({
           shownInFirstCycleRef.current.add(nextIndex)
           // Check if first cycle is complete
           if (shownInFirstCycleRef.current.size >= imageList.length) {
-            console.log("First cycle complete! Switching to MEMORY RECAP MODE - Grid Phase")
+            console.log(
+              "First cycle complete! Waiting for full duration before switching to MEMORY RECAP MODE"
+            )
             isFirstCycleCompleteRef.current = true
-            
-            // Smooth transition to recap mode - fade out current image first
-            if (currentImageRef.current) {
-              gsap.to(currentImageRef.current, {
-                opacity: 0,
-                scale: 0.8,
-                z: -300,
-                filter: "blur(10px) brightness(0.5)",
-                duration: 0.6,
-                ease: "power2.in",
-                onComplete: () => {
-                  setIsFastRecapMode(true)
-                  setRecapPhase("grid")
-                  recapModeStartTimeRef.current = Date.now()
-                  // Reset recap tracking
-                  shownInRecapRef.current.clear()
-                  recapStartIndexRef.current = null
-                  isRecapCompleteRef.current = false
-                }
-              })
-            } else {
-              setIsFastRecapMode(true)
-              setRecapPhase("grid")
-              recapModeStartTimeRef.current = Date.now()
-              shownInRecapRef.current.clear()
-              recapStartIndexRef.current = null
-              isRecapCompleteRef.current = false
-            }
+
+            // Wait for the full image duration before switching to recap mode
+            // This ensures the last image is displayed for the full duration
+            setTimeout(() => {
+              console.log("Switching to MEMORY RECAP MODE - Grid Phase")
+
+              // Smooth transition to recap mode - fade out current image first
+              if (currentImageRef.current) {
+                gsap.to(currentImageRef.current, {
+                  opacity: 0,
+                  scale: 0.8,
+                  z: -300,
+                  filter: "blur(10px) brightness(0.5)",
+                  duration: 0.6,
+                  ease: "power2.in",
+                  onComplete: () => {
+                    setIsFastRecapMode(true)
+                    setRecapPhase("grid")
+                    recapModeStartTimeRef.current = Date.now()
+                    // Reset recap tracking
+                    shownInRecapRef.current.clear()
+                    recapStartIndexRef.current = null
+                    isRecapCompleteRef.current = false
+                  },
+                })
+              } else {
+                setIsFastRecapMode(true)
+                setRecapPhase("grid")
+                recapModeStartTimeRef.current = Date.now()
+                shownInRecapRef.current.clear()
+                recapStartIndexRef.current = null
+                isRecapCompleteRef.current = false
+              }
+            }, NORMAL_IMAGE_DURATION) // Wait full duration before switching
           }
         }
       }
@@ -670,7 +685,7 @@ const ImageSlider: React.FC<ImageSliderProps> = ({
       console.log("Waiting for initial delay before starting slideshow")
       return
     }
-    
+
     // Check both state and ref for immediate stopping
     const shouldStop =
       imageList.length === 0 ||
@@ -758,6 +773,14 @@ const ImageSlider: React.FC<ImageSliderProps> = ({
         !isWinnerRevealed &&
         !isWinnerRevealedRef.current
       ) {
+        // Don't auto-advance if first cycle is complete but we're waiting to switch to recap mode
+        if (isFirstCycleCompleteRef.current && !isFastRecapMode) {
+          console.log(
+            "First cycle complete, waiting to switch to recap mode - skipping auto-advance"
+          )
+          return
+        }
+
         let nextIndex: number | null
 
         if (isFastRecapMode) {
@@ -867,14 +890,16 @@ const ImageSlider: React.FC<ImageSliderProps> = ({
   useEffect(() => {
     if (!isFastRecapMode || recapPhase !== "grid") return
 
-    console.log("Memory Recap Mode - Grid Phase: Showing all images simultaneously")
+    console.log(
+      "Memory Recap Mode - Grid Phase: Showing all images simultaneously"
+    )
 
-    // Phase 1: Show all images in grid (2 seconds)
+    // Phase 1: Show all images in grid (10 seconds)
     const gridTimer = setTimeout(() => {
       console.log("Memory Recap Mode - Flash Phase: Flashing 2-3 random images")
-      
+
       // Smooth transition: fade grid slightly, then switch to flash phase
-      const gridContainer = document.querySelector('[data-recap-grid]')
+      const gridContainer = document.querySelector("[data-recap-grid]")
       if (gridContainer) {
         gsap.to(gridContainer, {
           opacity: 0.7,
@@ -890,7 +915,7 @@ const ImageSlider: React.FC<ImageSliderProps> = ({
               duration: 0.3,
               ease: "power1.out",
             })
-          }
+          },
         })
       } else {
         setRecapPhase("flash")
@@ -900,7 +925,10 @@ const ImageSlider: React.FC<ImageSliderProps> = ({
       const nonWinnerImages = imageList
         .map((_, index) => index)
         .filter((index) => index !== WINNER_INDEX)
-      const flashCount = Math.min(2 + Math.floor(Math.random() * 2), nonWinnerImages.length) // 2-3 images
+      const flashCount = Math.min(
+        2 + Math.floor(Math.random() * 2),
+        nonWinnerImages.length
+      ) // 2-3 images
       const selectedFlashImages: number[] = []
       const availableIndices = [...nonWinnerImages]
 
@@ -916,9 +944,9 @@ const ImageSlider: React.FC<ImageSliderProps> = ({
       // Phase 2: Flash effects (2 seconds)
       const flashTimer = setTimeout(() => {
         console.log("Memory Recap Mode - Winner Phase: Zooming in winner")
-        
+
         // Smooth transition: fade out grid/flash, then show winner
-        const gridContainer = document.querySelector('[data-recap-grid]')
+        const gridContainer = document.querySelector("[data-recap-grid]")
         if (gridContainer) {
           gsap.to(gridContainer, {
             opacity: 0,
@@ -929,7 +957,7 @@ const ImageSlider: React.FC<ImageSliderProps> = ({
             onComplete: () => {
               setRecapPhase("winner")
               setFlashingImages([])
-              
+
               // Phase 3: Transition to winner (after brief pause)
               setTimeout(() => {
                 if (
@@ -944,13 +972,15 @@ const ImageSlider: React.FC<ImageSliderProps> = ({
                     setCurrentImageInfo(imageList[WINNER_INDEX])
                     setCurrentIndex(WINNER_INDEX)
                     currentIndexRef.current = WINNER_INDEX
-                    
+
                     currentImageRef.current.src = imageList[WINNER_INDEX].image
                     currentImageRef.current.style.display = "block"
                     currentImageRef.current.style.opacity = "0"
-                    currentImageRef.current.style.transform = "scale(0.2) translateZ(-600px) rotateY(20deg)"
-                    currentImageRef.current.style.filter = "blur(10px) brightness(0.5)"
-                    
+                    currentImageRef.current.style.transform =
+                      "scale(0.2) translateZ(-600px) rotateY(20deg)"
+                    currentImageRef.current.style.filter =
+                      "blur(10px) brightness(0.5)"
+
                     // Zoom in winner with dramatic effect
                     gsap.to(currentImageRef.current, {
                       opacity: 1,
@@ -963,14 +993,14 @@ const ImageSlider: React.FC<ImageSliderProps> = ({
                       onComplete: () => {
                         // Trigger winner transition with effects
                         transitionToNext(WINNER_INDEX, true)
-                      }
+                      },
                     })
                   } else {
                     transitionToNext(WINNER_INDEX, true)
                   }
                 }
               }, 300)
-            }
+            },
           })
         } else {
           setRecapPhase("winner")
@@ -989,7 +1019,7 @@ const ImageSlider: React.FC<ImageSliderProps> = ({
       }, 2000)
 
       return () => clearTimeout(flashTimer)
-    }, 2000)
+    }, 1000000) // Changed to 10 seconds - display all recap images for 10 seconds
 
     return () => clearTimeout(gridTimer)
   }, [isFastRecapMode, recapPhase, imageList, WINNER_INDEX, transitionToNext])
@@ -1002,15 +1032,15 @@ const ImageSlider: React.FC<ImageSliderProps> = ({
 
       currentImageRef.current.src = imageList[0].image
       currentImageRef.current.style.opacity = "0"
-      
+
       // Wait 5 seconds before starting slideshow
       console.log(`Waiting ${INITIAL_DELAY_MS}ms before starting slideshow...`)
-      
+
       const delayTimer = setTimeout(() => {
         console.log("Initial delay complete, starting slideshow")
         initialDelayCompleteRef.current = true
         setInitialDelayComplete(true) // Trigger re-render to start auto-advance
-        
+
         if (currentImageRef.current) {
           currentImageRef.current.style.transform =
             "scale(0.9) translateZ(-200px) rotateY(15deg)"
@@ -1027,7 +1057,7 @@ const ImageSlider: React.FC<ImageSliderProps> = ({
             ease: "power3.out",
           })
         }
-        
+
         // Show text overlay with fade-in animation
         if (textRef.current) {
           gsap.to(textRef.current, {
@@ -1038,7 +1068,7 @@ const ImageSlider: React.FC<ImageSliderProps> = ({
           })
         }
       }, INITIAL_DELAY_MS)
-      
+
       return () => {
         clearTimeout(delayTimer)
       }
@@ -1189,93 +1219,99 @@ const ImageSlider: React.FC<ImageSliderProps> = ({
         }}
       >
         {/* Memory Recap Mode: Grid Layout - Show all images simultaneously */}
-        {isFastRecapMode && (recapPhase === "grid" || recapPhase === "flash") && (
-          <div 
-            className="absolute inset-0 z-10 flex items-center justify-center p-2 md:p-3 lg:p-4 overflow-auto"
-            data-recap-grid
-            style={{
-              animation: recapPhase === "grid" 
-                ? "sceneTransitionIn 0.8s ease-out forwards"
-                : recapPhase === "flash"
-                ? "sceneFlashTransition 0.6s ease-in-out forwards"
-                : "none",
-            }}
-          >
+        {isFastRecapMode &&
+          (recapPhase === "grid" || recapPhase === "flash") && (
             <div
-              className="grid w-full max-w-[98vw]"
+              className="absolute inset-0 z-10 flex items-center justify-center p-2 md:p-3 lg:p-4 overflow-auto"
+              data-recap-grid
               style={{
-                gridTemplateColumns: `repeat(${Math.ceil(Math.sqrt(imageList.length))}, minmax(0, 1fr))`,
-                gap: "6px",
-                placeItems: "stretch",
-                padding: "8px",
+                animation:
+                  recapPhase === "grid"
+                    ? "sceneTransitionIn 0.8s ease-out forwards"
+                    : recapPhase === "flash"
+                    ? "sceneFlashTransition 0.6s ease-in-out forwards"
+                    : "none",
               }}
             >
-              {imageList.map((imgInfo, index) => {
-                const isFlashing = flashingImages.includes(index)
-                // Random tilt for each image (slight rotation from side to side) - varied angles
-                // Use a seed based on index for consistent but varied tilts
-                const seed = index * 7 + 13
-                const tiltAngle = ((seed % 7) - 3) * (2 + (seed % 3)) // -15 to +15 degrees, varied
-                const tiltDirection = seed % 2 === 0 ? 1 : -1
-                const finalTilt = tiltAngle * tiltDirection * 0.6 // Scale down to -9 to +9 degrees
-                
-                return (
-                  <div
-                    key={`recap-grid-${index}`}
-                    className="relative aspect-square overflow-hidden"
-                    style={{
-                      width: "75%", // Make images smaller (75% of grid cell)
-                      margin: "auto",
-                      opacity: recapPhase === "grid" ? 1 : isFlashing ? 1 : 0.2,
-                      filter: isFlashing
-                        ? "brightness(1.4) saturate(1.4)"
-                        : recapPhase === "flash"
-                        ? "brightness(0.3) grayscale(0.7)"
-                        : "brightness(0.9)",
-                      transition: "all 0.5s ease-in-out",
-                      transform: `rotateZ(${finalTilt}deg)`,
-                      transformStyle: "preserve-3d",
-                    }}
-                  >
-                    <img
-                      src={imgInfo.image}
-                      alt={imgInfo.actor}
-                      className="w-full h-full object-cover rounded-md shadow-xl"
-                      style={{
-                        animation:
-                          recapPhase === "grid"
-                            ? `gridImageAppear ${0.1 + (index % imageList.length) * 0.015}s ease-out forwards`
-                            : isFlashing
-                            ? "flashPulse 0.5s ease-in-out infinite"
-                            : "none",
-                        animationDelay:
-                          recapPhase === "grid" ? `${(index % imageList.length) * 0.01}s` : "0s",
-                        transformStyle: "preserve-3d",
-                        boxShadow: isFlashing
-                          ? "0 0 70px rgba(255, 215, 0, 1.2), 0 0 140px rgba(255, 215, 0, 1), 0 0 200px rgba(255, 215, 0, 0.8), inset 0 0 50px rgba(255, 215, 0, 0.3)"
-                          : "0 6px 20px rgba(0, 0, 0, 0.5)",
-                        transform: isFlashing ? "scale(1.15)" : "scale(1)",
-                        zIndex: isFlashing ? 30 : 10,
-                        border: isFlashing ? "2px solid rgba(255, 215, 0, 0.8)" : "none",
-                        opacity: recapPhase === "grid" ? 0 : 1, // Start hidden, animation makes visible
-                      }}
-                    />
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-        )}
+              <div
+                className="grid w-full max-w-[95vw]"
+                style={{
+                  gridTemplateColumns: "repeat(5, minmax(0, 1fr))", // Fixed 5 items per row
+                  gap: "2px",
+                  placeItems: "center",
+                  padding: "12px",
+                }}
+              >
+                {imageList.map((imgInfo, index) => {
+                  const isFlashing = flashingImages.includes(index)
+                  // Random tilt for each image (slight rotation from side to side) - varied angles
+                  // Use a seed based on index for consistent but varied tilts
+                  const seed = index * 7 + 13
+                  const tiltAngle = ((seed % 7) - 3) * (2 + (seed % 3)) // -15 to +15 degrees, varied
+                  const tiltDirection = seed % 2 === 0 ? 1 : -1
+                  const finalTilt = tiltAngle * tiltDirection * 0.6 // Scale down to -9 to +9 degrees
 
+                  return (
+                    <div
+                      key={`recap-grid-${index}`}
+                      className="relative aspect-square overflow-visible"
+                      style={{
+                        width: "60%", // Make images smaller (60% of grid cell) to prevent overflow
+                        margin: "auto",
+                        opacity: 1, // Always visible - no filtering/dimming
+                        filter: isFlashing
+                          ? "brightness(1.4) saturate(1.4)"
+                          : "brightness(1)", // Keep all images at normal brightness - no dimming
+                        transition: "all 0.5s ease-in-out",
+                        transform: `rotateZ(${finalTilt}deg)`,
+                        transformStyle: "preserve-3d",
+                      }}
+                    >
+                      <img
+                        src={imgInfo.image}
+                        alt={imgInfo.actor}
+                        className="w-full h-full object-cover rounded-md shadow-xl"
+                        style={{
+                          animation:
+                            recapPhase === "grid"
+                              ? `gridImageAppear ${
+                                  0.1 + (index % imageList.length) * 0.015
+                                }s ease-out forwards`
+                              : isFlashing
+                              ? "flashPulse 0.5s ease-in-out infinite"
+                              : "none",
+                          animationDelay:
+                            recapPhase === "grid"
+                              ? `${(index % imageList.length) * 0.01}s`
+                              : "0s",
+                          transformStyle: "preserve-3d",
+                          boxShadow: isFlashing
+                            ? "0 0 70px rgba(255, 215, 0, 1.2), 0 0 140px rgba(255, 215, 0, 1), 0 0 200px rgba(255, 215, 0, 0.8), inset 0 0 50px rgba(255, 215, 0, 0.3)"
+                            : "0 6px 20px rgba(0, 0, 0, 0.5)",
+                          transform: isFlashing ? "scale(1.08)" : "scale(1)", // Reduced scale to prevent overflow
+                          zIndex: isFlashing ? 30 : 10,
+                          border: isFlashing
+                            ? "2px solid rgba(255, 215, 0, 0.8)"
+                            : "none",
+                          opacity: recapPhase === "grid" ? 0 : 1, // Start hidden, animation makes visible
+                        }}
+                      />
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
 
         {/* Normal mode or Winner phase: Single image display */}
         {(!isFastRecapMode || recapPhase === "winner") && (
           <div
             className="absolute inset-0 z-10 flex items-center justify-center"
             style={{
-              animation: recapPhase === "winner" && isFastRecapMode
-                ? "sceneWinnerTransition 1s ease-out forwards"
-                : "none",
+              animation:
+                recapPhase === "winner" && isFastRecapMode
+                  ? "sceneWinnerTransition 1s ease-out forwards"
+                  : "none",
             }}
           >
             {/* Current image */}
@@ -1314,21 +1350,26 @@ const ImageSlider: React.FC<ImageSliderProps> = ({
             />
           </div>
         )}
-        
+
         {/* Scene transition overlay - for smooth transitions between phases */}
         {isFastRecapMode && (
           <div
             className="absolute inset-0 z-9 pointer-events-none"
             style={{
-              background: 
+              background:
                 recapPhase === "grid"
                   ? "radial-gradient(circle at center, transparent 0%, rgba(0, 0, 0, 0.3) 100%)"
                   : recapPhase === "flash"
                   ? "radial-gradient(circle at center, rgba(255, 215, 0, 0.1) 0%, rgba(0, 0, 0, 0.4) 100%)"
                   : "transparent",
-              opacity: recapPhase === "grid" ? 0 : recapPhase === "flash" ? 0.5 : 0,
-              transition: "opacity 0.6s ease-in-out, background 0.6s ease-in-out",
-              animation: recapPhase === "flash" ? "flashOverlayPulse 1s ease-in-out infinite" : "none",
+              opacity:
+                recapPhase === "grid" ? 0 : recapPhase === "flash" ? 0.5 : 0,
+              transition:
+                "opacity 0.6s ease-in-out, background 0.6s ease-in-out",
+              animation:
+                recapPhase === "flash"
+                  ? "flashOverlayPulse 1s ease-in-out infinite"
+                  : "none",
             }}
           />
         )}
